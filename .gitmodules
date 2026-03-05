@@ -1,0 +1,3 @@
+[submodule "toudaivocadou-org"]
+	path = toudaivocadou-org
+	url = git@github.com:toudaivocadou/toudaivocadou-org.git

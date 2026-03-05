@@ -1,0 +1,10 @@
+/target
+dist
+.direnv
+.cache
+.idea
+.env
+zvezdochka.toml
+zvezdochka-state.toml
+zvezdochka.db
+zvezdochka.db-*

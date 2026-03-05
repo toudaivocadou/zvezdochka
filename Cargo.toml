@@ -1,0 +1,95 @@
+[package]
+name = "toudaivocadou"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+discord = [
+    "serenity",
+    "poise",
+    "poise_error",
+    "figment2",
+    "sqlx",
+    "refinery",
+    "process-wrap",
+    "s3",
+]
+
+[dependencies]
+pulldown-cmark = "0.13.0"
+maud = "0.27.0"
+toml = "1.0.3+spec-1.1.0"
+url = "2.5.8"
+urlencoding = "2.1.3"
+anyhow = "1.0"
+camino = "1.2.2"
+serde_json = "1.0"
+clap = { version = "4.5.60", features = ["derive"] }
+ammonia = "4.1.2"
+seahash = "4.1.0"
+base64 = "0.22.1"
+rss = "2.0.12"
+log = "0.4.29"
+env_logger = "0.11.9"
+lol_html = "2.7.1"
+
+[dependencies.hauchiwa]
+version = "0.14.0"
+features = ["tokio", "grass", "image", "server", "sitemap"]
+
+[dependencies.minijinja]
+version = "2.16.0"
+features = ["unicode", "speedups", "loader"]
+
+[dependencies.minijinja-contrib]
+version = "2.16.0"
+features = ["pycompat"]
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.reqwest]
+version = "0.13.2"
+features = ["blocking", "json", "rustls", "multipart"]
+default-features = false
+
+# Discord Bot Dependencies
+[dependencies.serenity]
+version = "0.12.5"
+optional = true
+
+[dependencies.poise]
+version = "0.6.1"
+features = ["cache", "chrono", "handle_panics"]
+optional = true
+
+[dependencies.poise_error]
+version = "1.7.1"
+optional = true
+
+[dependencies.figment2]
+version = "0.11.4"
+features = ["toml", "env"]
+optional = true
+
+[dependencies.sqlx]
+version = "0.8.6"
+features = ["sqlx-sqlite", "sqlite", "runtime-tokio", "derive"]
+optional = true
+
+[dependencies.refinery]
+version = "0.9.0"
+features = ["serde"]
+optional = true
+
+[dependencies.process-wrap]
+version = "9.0.3"
+features = ["tokio1", "std", "kill-on-drop"]
+optional = true
+
+[dependencies.s3]
+version = "0.1.15"
+features = ["async", "rustls", "multipart"]
+optional = true

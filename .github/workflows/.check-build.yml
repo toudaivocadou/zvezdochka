@@ -1,0 +1,97 @@
+name: Check and Build Site
+on:
+  push:
+    branches-ignore:
+      - gh-pages
+
+jobs:
+  examine-changed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - "**.rs"
+              - "Cargo.toml"
+              - "Cargo.lock"
+            markdown:
+              - "**.md"
+              - "public/*"
+            js:
+              - "**.js"
+            css:
+              - "**.css"
+            workflow:
+              - "**.yml"
+            any:
+              - "**.rs"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - "**.md"
+              - "public/**"
+              - "**.js"
+              - "**.css"
+              - "**.yml"
+
+  check-rustfmt:
+    runs-on: ubuntu-latest
+    needs: examine-changed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - name: run cargo fmt check
+        uses: actions-rust-lang/rustfmt@v1
+  check-clippy:
+    runs-on: ubuntu-latest
+    needs:
+      - check-rustfmt
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+      - name: run cargo clippy
+        run: cargo clippy
+
+  build-site:
+    runs-on: ubuntu-latest
+    needs:
+      - examine-changed
+      - check-clippy
+      - check-rustfmt
+    if: ${{ ( ( needs.examine-changed.result.any == 'true' ) || contains(github.event.head_commit.message, '[REBUILD]') || ( needs.check-clippy.result == 'success' && needs.check-rustfmt.result == 'success' ) ) && always() }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: install dependencies
+        run: sudo apt install -y esbuild
+      - name: cargo run
+        run: cargo run -- -d "a" -s "."
+      - name: upload artifact
+        id: build
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "dist"
+
+  deploy-site:
+    runs-on: ubuntu-latest
+    needs: build-site
+    if: ${{ always() && needs.build-site.result != 'skipped' }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      id-token: write
+      pages: write
+
+    steps:
+      - name: Deploy to GH Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
