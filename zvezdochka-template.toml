@@ -1,0 +1,4 @@
+db_path = ""
+admin_role = 0
+preview_url = "ah-so-denpa.toudaivocadou.org"
+s3_url = "vortuka5.toudaivocadou.org"
