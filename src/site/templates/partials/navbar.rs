@@ -17,6 +17,23 @@ pub enum Sections {
     AlbumPost,
 }
 
+impl Sections {
+    pub fn opengraph_type(&self) -> &'static str {
+        match self {
+            Sections::Home => "website",
+            Sections::Members => "website",
+            Sections::MemberProfile => "profile",
+            Sections::Activities => "website",
+            Sections::Join => "website",
+            Sections::News => "website",
+            Sections::NewsPost => "article",
+            Sections::Works => "website",
+            Sections::WorksPost => "music.song",
+            Sections::AlbumPost => "music.album",
+        }
+    }
+}
+
 impl Display for Sections {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")

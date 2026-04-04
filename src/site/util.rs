@@ -14,6 +14,8 @@ use maud::Markup;
 use minijinja::Environment;
 use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html::push_html};
 use serde::Serialize;
+use time::Date;
+use time::macros::format_description;
 use url::Url;
 
 pub fn shorten(content: &str) -> String {
@@ -334,4 +336,20 @@ pub fn rewrite_link(site_url: &str, link: String) -> Result<String, anyhow::Erro
     }
 
     Ok(link)
+}
+
+pub fn make_path_relative(root: &str, path: impl AsRef<str>) -> String {
+    let path = path.as_ref();
+    if path.starts_with(root) {
+        return path.to_string();
+    }
+    if path.starts_with("/") {
+        return path.to_string();
+    }
+    return format!("{root}/{path}");
+}
+
+pub fn format_date(date: Date) -> String {
+    let format = format_description!("[year]-[month]-[day]");
+    date.format(format).unwrap()
 }

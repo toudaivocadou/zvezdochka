@@ -22,8 +22,9 @@ use crate::site::util::{
 };
 use crate::site::work::{DisplayWorkMeta, WorkMeta};
 use clap::{Parser, ValueEnum};
-use hauchiwa::RuntimeError;
+use hauchiwa::error::HauchiwaError;
 use hauchiwa::loader::Content;
+use hauchiwa::{Blueprint, RuntimeError};
 use hauchiwa::{Page, Website, loader};
 use log::{error, info};
 use maud::{Render, html};
@@ -75,8 +76,99 @@ enum Mode {
 
 #[derive(Clone, Debug)]
 pub struct SiteData {
-    pub build_id: u64,
     pub site_url: String,
+}
+
+pub fn buildsite(site_url: String, source_path: String) -> Result<(), HauchiwaError> {
+    let time_start = Instant::now();
+    let site_data = SiteData { site_url };
+    info!("Starting Site Build. サイト建築始め中");
+    info!("Base Site URL: {site_url}");
+    info!("Site Source Path: {source_path}");
+
+    let mut config = Blueprint::<SiteData>::new();
+
+    // define base image, script, js resources
+
+    let styles = config
+        .load_css()
+        .entry(format!("{source_path}/styles/*.css"))
+        .register()?;
+    info!("Registered CSS Styles.");
+
+    let images = config
+        .load_images()
+        .glob(format!("{source_path}/images/**/*.png"))
+        .glob(format!("{source_path}/images/**/*.jpg"))
+        .glob(format!("{source_path}/images/**/*.jpeg"))
+        .glob(format!("{source_path}/images/**/*.avif"))
+        .glob(format!("{source_path}/images/**/*.gif"))
+        .register()?;
+    info!("Registered png, jpeg, jpg, avif, gif images.");
+
+    let scripts = config
+        .load_js()
+        .entry(format!("{source_path}/js/*.js"))
+        .bundle(true)
+        .minify(true)
+        .register()?;
+    info!("Registered JS Scripts. Minification and Bundling is enabled.");
+
+    let icons = config
+        .task()
+        .name("Load SVG")
+        .glob(format!("{source_path}/assets/**/*.svg"));
+    info!("Registered SVG icons.");
+
+    // load site posts
+
+    let members = config
+        .load_documents::<MemberMeta>()
+        .source(format!("{source_path}/works/[!_]*.md"))
+        .register()?;
+    info!("Registered Member Pages. メンバーページを登録しました。");
+
+    let works = config
+        .load_documents::<WorkMeta>()
+        .source(format!("{source_path}/works/[!_]*.md"))
+        .register()?;
+    info!("Registered Works Pages. 作品ページを登録しました。");
+
+    let albums = config
+        .load_documents::<AlbumMeta>()
+        .source(format!("{source_path}/works/[!_]*.md"))
+        .register()?;
+    info!("Registered Album Pages. アルバムページを登録しました。");
+
+    let news = config
+        .load_documents::<NewsMeta>()
+        .source(format!("{source_path}/works/[!_]*.md"))
+        .register()?;
+    info!("Registered News Pages. ニュースページを登録しました。");
+
+    // build SiteMap
+
+    let sitemap = config.task().using((members, works, albums, news)).merge(
+        |_, (mems, works, albs, newses)| {
+            let members = mems
+                .values()
+                .map(|m| (m.matter.ascii_name.clone(), m.matter))
+                .collect();
+            let works = works.values().map(|w| w.matter).collect();
+            let albums = albs.values().map(|a| a.matter).collect();
+            let news = newses.values().map(|n| n.matter).collect();
+
+            let site_map = SiteMap {
+                members,
+                news,
+                works,
+                albums,
+            };
+            Ok(site_map)
+        },
+    );
+
+    // start site dynamic page construction
 }
 
 pub fn build_site(build_id: u64, site_url: String) -> Result<(), hauchiwa::HauchiwaError> {

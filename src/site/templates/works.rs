@@ -148,14 +148,17 @@ pub fn work_reference(title: &str, author_ascii: &str) -> String {
     let authorhash = seahash::hash(author_ascii.as_bytes()) as u128;
     let combined = (authorhash << 64) + titlehash;
     let cachebust = BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes());
-    
+
+    format!("{}-{}", urlencoding::encode(title), cachebust)
 }
 
 pub fn album_reference(title: &str, cover: &str) -> String {
     let titlehash = seahash::hash(title.as_bytes()) as u128;
     let coverhash = seahash::hash(cover.as_bytes()) as u128;
     let combined = (titlehash << 64) + coverhash;
-    BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes())
+    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes());
+
+    format!("{}-{}", urlencoding::encode(title), cachebust)
 }
 
 pub fn album_card(

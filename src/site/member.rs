@@ -1,7 +1,12 @@
-use crate::metadata::Metadata;
-use crate::templates::partials::navbar::Sections;
+use hauchiwa::{
+    Tracker,
+    loader::{Image, image::ImageFormat},
+};
+use maud::{Render, html};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use url::Url;
+
+use crate::site::{metadata::RenderImageMetadata, templates::partials::navbar::Sections};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MemberMeta {
@@ -13,25 +18,37 @@ pub struct MemberMeta {
     pub entry_year: Option<i32>,    // 入年
     pub short: String,              // 自己紹介（短い）
 
-    pub links: HashSet<String>, // SNSリンク
+    pub links: Vec<Url>, // SNSリンク
 }
 
-impl MemberMeta {
-    pub fn to_metadata(value: MemberMeta) -> Metadata {
-        let page_title = if value.name == value.ascii_name {
-            value.name.clone()
-        } else {
-            format!("{}({})", value.name, value.ascii_name)
-        };
+impl RenderImageMetadata for &MemberMeta {
+    fn render_image_meta(&self, image: Tracker<'_, Image>) -> maud::Markup {
+        let path = image
+            .get(format!("images/icon/{}.jpg", &self.ascii_name))
+            .ok()
+            .map(|img| img.get(ImageFormat::WebP))
+            .flatten()
+            .map(|path| path.as_str());
+        match path {
+            Some(p) => html! {
+                meta property="og:image" content=(p);
+            },
+            None => html! {},
+        }
+    }
+}
 
-        Metadata {
-            page_title: format!("{page_title} - 東京大学ボカロP同好会"),
-            page_image: Some(format!("images/icon/{}.jpg", value.ascii_name)),
-            canonical_link: format!("/members/{}.html", value.ascii_name),
-            section: Sections::MemberProfile,
-            description: Some(value.short),
-            author: Some(value.name),
-            date: None,
+impl Render for &MemberMeta {
+    fn render(&self) -> maud::Markup {
+        let og_type = Sections::MemberProfile.opengraph_type();
+
+        html! {
+            meta property="og:title" content=(&self.name);
+            meta property="og:site_name" content="東京大学ボカロP同好会 - University of Tokyo Vocaloid Producer Club";
+            meta property="og:locale" content="ja_JP";
+            meta property="og:type" content=(og_type);
+            meta property="og:profile:username" content=(&self.ascii_name);
+            meta property="og:description" content=(&self.short);
         }
     }
 }
