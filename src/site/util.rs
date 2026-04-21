@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hasher;
 use std::sync::OnceLock;
 
 use crate::SiteData;
@@ -13,6 +14,7 @@ use lol_html::{Settings, element, rewrite_str};
 use maud::Markup;
 use minijinja::Environment;
 use pulldown_cmark::{CowStr, Event, Options, Parser, Tag, html::push_html};
+use seahash::SeaHasher;
 use serde::Serialize;
 use time::Date;
 use time::macros::format_description;
@@ -352,4 +354,10 @@ pub fn make_path_relative(root: &str, path: impl AsRef<str>) -> String {
 pub fn format_date(date: Date) -> String {
     let format = format_description!("[year]-[month]-[day]");
     date.format(format).unwrap()
+}
+
+pub fn hash<T: std::hash::Hash>(item: &T) -> u64 {
+    let mut seahasher = SeaHasher::default();
+    item.hash(&mut seahasher);
+    seahasher.finish()
 }

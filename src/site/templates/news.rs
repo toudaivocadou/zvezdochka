@@ -1,4 +1,5 @@
 use crate::news::NewsMeta;
+use crate::site::sitemap::NewsRef;
 use crate::sitemap::SiteMap;
 use crate::templates::base::base;
 use crate::templates::functions::sns::sns_icon;
@@ -7,8 +8,6 @@ use crate::util::{image, shorten};
 use crate::{SiteData, metadata::Metadata};
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
-use hauchiwa::Context;
-use hauchiwa::RuntimeError;
 use maud::{Markup, PreEscaped, html};
 use std::collections::HashMap;
 
@@ -30,7 +29,7 @@ pub fn news_posts(
         section #list {
             .listcontainer .flex-container style="align-items: center;"{
                 @for post_meta in &site_map.news {
-                    (post_card(sack, post_meta, name_map)?)
+                    (news_card(sack, post_meta, name_map)?)
                 }
                 @if site_map.news.is_empty() {
                     p .work-description style="text-align: center;" {
@@ -56,7 +55,7 @@ pub fn news_posts(
     base(sack, &metadata, Some(&[]), inner)
 }
 
-pub fn post_card(
+pub fn news_card(
     context: &Context<SiteData>,
     post_meta: &NewsMeta,
     name_map: &HashMap<String, String>,
@@ -66,11 +65,11 @@ pub fn post_card(
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
-                img .post-img src=(post_thumbnail(context, post_meta)?) {}
+                img .post-img src=(news_thumbnail(context, post_meta)?) {}
             }
             .post-info {
                 h3 .post-card-title {
-                    a href=(format!("/news/{}.html", post_reference(post_meta))) {
+                    a href=(format!("/news/{}.html", news_reference(post_meta))) {
                         (post_meta.title)
                     }
                 }
@@ -95,7 +94,7 @@ pub fn post_card(
     })
 }
 
-pub fn post_detail(
+pub fn news_detail(
     sack: &Context<SiteData>,
     post_meta: &NewsMeta,
     content: &str,
@@ -108,7 +107,7 @@ pub fn post_detail(
             .member-detail-container {
                 .member-profile {
                     .work-image {
-                        img src=(post_thumbnail(sack, post_meta)?) alt="header image" { }
+                        img src=(news_thumbnail(sack, post_meta)?) alt="header image" { }
                     }
                     .member-profile-info {
                         h2 { (post_meta.title) }
@@ -145,8 +144,8 @@ pub fn post_detail(
 
     let metadata = Metadata {
         page_title: post_meta.title.clone(),
-        page_image: Some(post_thumbnail(sack, post_meta)?),
-        canonical_link: format!("/news/{}.html", post_reference(post_meta)),
+        page_image: Some(news_thumbnail(sack, post_meta)?),
+        canonical_link: format!("/news/{}.html", news_reference(post_meta)),
         section: Sections::NewsPost,
         description: Some(shorten(content)),
         author: post_meta.author.clone(),
@@ -156,7 +155,7 @@ pub fn post_detail(
     base(sack, &metadata, Some(&[]), inner)
 }
 
-pub fn post_thumbnail(sack: &Context<SiteData>, item: &NewsMeta) -> Result<String, RuntimeError> {
+pub fn news_thumbnail(sack: &Context<SiteData>, item: &NewsMeta) -> Result<String, RuntimeError> {
     match &item.header_image {
         Some(header) => Ok(image(sack, format!("images/{}", header))?),
         None => Ok(image(sack, "images/gray.jpg")?),
@@ -165,14 +164,8 @@ pub fn post_thumbnail(sack: &Context<SiteData>, item: &NewsMeta) -> Result<Strin
     // TODO: Get thumbnail from SNS post.
 }
 
-pub fn post_reference(meta: &NewsMeta) -> String {
-    let authorhash = seahash::hash(
-        meta.author
-            .as_deref()
-            .unwrap_or("東大ボカロP同好会")
-            .as_bytes(),
-    ) as u128;
-    let titlehash = seahash::hash(meta.title.as_bytes()) as u128;
-    let combined = (authorhash << 64) + titlehash;
-    BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes())
+pub fn news_reference(title: &str, hash: u64) -> NewsRef {
+    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
+
+    NewsRef(format!("{title}-{cachebust}"))
 }

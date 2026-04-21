@@ -13,7 +13,7 @@ use crate::site::{
     util::{format_date, make_path_relative},
 };
 
-#[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct WorkMeta {
     pub title: String,
     pub authors: Vec<String>,

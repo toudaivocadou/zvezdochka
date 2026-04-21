@@ -4,21 +4,22 @@ use crate::site::news::NewsMeta;
 use crate::site::read::{
     parse_front_matter_and_fetch_contents, parse_post_meta, parse_work_meta, robots_txt,
 };
-use crate::site::sitemap::SiteMap;
+use crate::site::sitemap::{MemberRef, SiteMap};
 use crate::site::templates::error::notfound;
 use crate::site::templates::functions::embed::{embed, jinja_embed};
 use crate::site::templates::functions::member::jinja_member;
 use crate::site::templates::index::index;
 use crate::site::templates::join::join_vocadou;
 use crate::site::templates::members::{member_detail, members as member_overview};
-use crate::site::templates::news::{news_posts, post_detail, post_reference};
+use crate::site::templates::news::{news_detail, news_posts, news_reference};
 use crate::site::templates::partials::navbar::Sections;
 use crate::site::templates::works::{
     album_detail, album_reference, work_detail, work_reference, works as works_overview,
 };
 use crate::site::util::{
-    AudioFile, SvgData, markup_to_page, render_metadata_and_final_page, rewrite_html, rewrite_link,
-    rewrite_page, rewrite_settings, set_external_bin_url, set_site_root, set_site_url, site_root,
+    AudioFile, SvgData, hash, markup_to_page, render_metadata_and_final_page, rewrite_html,
+    rewrite_link, rewrite_page, rewrite_settings, set_external_bin_url, set_site_root,
+    set_site_url, site_root,
 };
 use crate::site::work::{DisplayWorkMeta, WorkMeta};
 use clap::{Parser, ValueEnum};
@@ -120,6 +121,17 @@ pub fn buildsite(site_url: String, source_path: String) -> Result<(), HauchiwaEr
         .glob(format!("{source_path}/assets/**/*.svg"));
     info!("Registered SVG icons.");
 
+    // build minijinja environment
+
+    let environment = config.task().name("Build Minijinja Environment").run(|_| {
+        let mut environment = Environment::new();
+        environment.add_function("sns_embed", jinja_embed);
+        environment.add_function("member", jinja_member);
+        add_to_environment(&mut environment);
+        environment.set_unknown_method_callback(unknown_method_callback);
+        Ok(environment)
+    });
+
     // load site posts
 
     let members = config
@@ -152,11 +164,20 @@ pub fn buildsite(site_url: String, source_path: String) -> Result<(), HauchiwaEr
         |_, (mems, works, albs, newses)| {
             let members = mems
                 .values()
-                .map(|m| (m.matter.ascii_name.clone(), m.matter))
+                .map(|m| (MemberRef(m.matter.ascii_name.clone()), *m.matter))
                 .collect();
-            let works = works.values().map(|w| w.matter).collect();
-            let albums = albs.values().map(|a| a.matter).collect();
-            let news = newses.values().map(|n| n.matter).collect();
+            let works = works
+                .values()
+                .map(|w| (work_reference(&w.matter.title, hash(&w.matter)), *w.matter))
+                .collect();
+            let albums = albs
+                .values()
+                .map(|a| (album_reference(&a.matter.title, hash(&a.matter)), *a.matter))
+                .collect();
+            let news = newses
+                .values()
+                .map(|n| (news_reference(&n.matter.title, hash(&n.matter)), *n.matter))
+                .collect();
 
             let site_map = SiteMap {
                 members,
@@ -167,6 +188,10 @@ pub fn buildsite(site_url: String, source_path: String) -> Result<(), HauchiwaEr
             Ok(site_map)
         },
     );
+
+    // build work pages
+
+    let works = config.task().
 
     // start site dynamic page construction
 }
@@ -397,8 +422,8 @@ pub fn build_site(build_id: u64, site_url: String) -> Result<(), hauchiwa::Hauch
             let mut post_overview = vec![Page::html("news.html", news_posts(&ctx, &sitemap, &member_ascii_to_name)?.into_string())];
 
             let mut posts_detail = news.iter().map(|post_page| {
-                render_metadata_and_final_page(&ctx, &environment, &sitemap, &member_ascii_to_name, post_page.data, Sections::NewsPost, &post_page.data.meta.title, format!("news/{}.html", post_reference(&post_page.data.meta)), |ctx, meta, _, namemap, content| {
-                    post_detail(ctx, meta, content, namemap)
+                render_metadata_and_final_page(&ctx, &environment, &sitemap, &member_ascii_to_name, post_page.data, Sections::NewsPost, &post_page.data.meta.title, format!("news/{}.html", news_reference(&post_page.data.meta)), |ctx, meta, _, namemap, content| {
+                    news_detail(ctx, meta, content, namemap)
                 })
             }).collect::<Result<Vec<Page>, RuntimeError>>()?;
 

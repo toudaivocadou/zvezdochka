@@ -11,7 +11,7 @@ use crate::site::{
     metadata::RenderImageMetadata, templates::partials::navbar::Sections, util::make_path_relative,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NewsMeta {
     pub title: String,
     #[serde(default)]

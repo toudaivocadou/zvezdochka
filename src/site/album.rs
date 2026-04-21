@@ -27,7 +27,7 @@ pub struct Illustration {
     illustrator: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct AlbumMeta {
     pub title: String,
     pub authors: Vec<String>,

@@ -2,6 +2,7 @@ use crate::SiteData;
 use crate::album::AlbumMeta;
 use crate::die_linky::SocialLinkType;
 use crate::metadata::Metadata;
+use crate::site::sitemap::{AlbumRef, WorkRef};
 use crate::sitemap::SiteMap;
 use crate::templates::base::base;
 use crate::templates::functions::embed::embed;
@@ -143,22 +144,16 @@ pub fn work_card(
     })
 }
 
-pub fn work_reference(title: &str, author_ascii: &str) -> String {
-    let titlehash = seahash::hash(title.as_bytes()) as u128;
-    let authorhash = seahash::hash(author_ascii.as_bytes()) as u128;
-    let combined = (authorhash << 64) + titlehash;
-    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes());
+pub fn work_reference(title: &str, hash: u64) -> WorkRef {
+    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
 
-    format!("{}-{}", urlencoding::encode(title), cachebust)
+    WorkRef(format!("{}-{}", urlencoding::encode(title), cachebust))
 }
 
-pub fn album_reference(title: &str, cover: &str) -> String {
-    let titlehash = seahash::hash(title.as_bytes()) as u128;
-    let coverhash = seahash::hash(cover.as_bytes()) as u128;
-    let combined = (titlehash << 64) + coverhash;
-    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(combined.to_le_bytes());
+pub fn album_reference(title: &str, hash: u64) -> AlbumRef {
+    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
 
-    format!("{}-{}", urlencoding::encode(title), cachebust)
+    AlbumRef(format!("{}-{}", urlencoding::encode(title), cachebust))
 }
 
 pub fn album_card(

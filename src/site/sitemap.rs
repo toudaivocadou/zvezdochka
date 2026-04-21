@@ -6,20 +6,20 @@ use crate::site::member::MemberMeta;
 use crate::site::news::NewsMeta;
 use crate::site::work::WorkMeta;
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-pub struct MemberRef(String);
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct MemberRef(pub String);
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-pub struct NewsRef(String);
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct NewsRef(pub String);
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-pub struct WorkRef(String);
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct WorkRef(pub String);
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-pub struct AlbumRef(String);
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct AlbumRef(pub String);
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd)]
-pub struct MemberDisplayName(String);
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Eq, Ord)]
+pub struct MemberDisplayName(pub String);
 
 #[derive(Clone, Debug)]
 pub struct SiteMap {
@@ -27,8 +27,8 @@ pub struct SiteMap {
     pub news: HashMap<NewsRef, NewsMeta>,
     pub works: HashMap<WorkRef, WorkMeta>,
     pub albums: HashMap<AlbumRef, AlbumMeta>,
-    pub member_name_to_ascii: HashMap<MemberDisplayName, MemberRef>,
-    pub member_ascii_to_name: HashMap<MemberRef, MemberDisplayName>,
+    // pub member_name_to_ascii: HashMap<MemberDisplayName, MemberRef>,
+    // pub member_ascii_to_name: HashMap<MemberRef, MemberDisplayName>,
 }
 
 impl SiteMap {
