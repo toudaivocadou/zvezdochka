@@ -1,6 +1,5 @@
-use anyhow::Error;
+use eyre::Report;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use url::Url;
 
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,15 +35,9 @@ impl SocialLinkType {
             SocialLinkType::OtherUnknown(_) => "link.svg",
         }
     }
-}
 
-impl FromStr for SocialLinkType {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // parse into a URL
-        let url = Url::parse(s)?;
-        let domain = url.domain().ok_or(Error::msg("Bad URL"))?;
+    pub fn from_url(url: &Url) -> Result<SocialLinkType, Report> {
+        let domain = url.domain().ok_or(Report::msg(format!("Bad URL: {url}")))?;
         let url_type = match domain {
             "twitter.com" => SocialLinkType::Twitter,
             "x.com" => SocialLinkType::Twitter,

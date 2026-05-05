@@ -1,15 +1,9 @@
-use hauchiwa::{
-    Tracker,
-    loader::{Image, image::ImageFormat},
-};
-use maud::{Render, html};
+use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
 use time::Date;
 use url::Url;
 
-use crate::site::{
-    metadata::RenderImageMetadata, templates::partials::navbar::Sections, util::make_path_relative,
-};
+use crate::site::{metadata::RenderableMetadata, templates::partials::navbar::Sections};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NewsMeta {
@@ -27,25 +21,17 @@ pub struct NewsMeta {
     pub sns_links: Vec<Url>,
 }
 
-impl RenderImageMetadata for &NewsMeta {
-    fn render_image_meta(&self, image: Tracker<'_, Image>) -> maud::Markup {
-        if let Some(thumbnail) = &self.thumbnail {
-            let path = make_path_relative("images", thumbnail);
-            match image
-                .get(path)
-                .ok()
-                .map(|img| img.get(ImageFormat::WebP))
-                .flatten()
-                .map(|path| path.as_str())
-            {
-                Some(img) => html! {
-                    meta property="og:image" content=(img);
-                },
-                None => html! {},
+impl RenderableMetadata for &NewsMeta {
+    fn render_image_meta(&self) -> Option<Markup> {
+        self.thumbnail.as_ref().map(|th| {
+            html! {
+                meta property="og:image" content=(th);
             }
-        } else {
-            html! {}
-        }
+        })
+    }
+
+    fn section(&self) -> Sections {
+        Sections::NewsPost
     }
 }
 

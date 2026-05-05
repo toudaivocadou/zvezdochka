@@ -1,22 +1,20 @@
-use hauchiwa::{
-    Tracker,
-    loader::{Image, image::ImageFormat},
-};
 use maud::{Render, html};
 use serde::{Deserialize, Serialize};
 use time::Date;
 use url::Url;
 
 use crate::site::{
-    metadata::RenderImageMetadata,
-    templates::partials::navbar::Sections,
-    util::{format_date, make_path_relative},
+    metadata::RenderableMetadata, sitemap::MemberRef, templates::partials::navbar::Sections,
+    util::format_date,
 };
 
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct WorkMeta {
     pub title: String,
-    pub authors: Vec<String>,
+    #[serde(default)]
+    pub authors: Vec<MemberRef>,
+    #[serde(default)]
+    pub additional_authors: Vec<String>,
     pub date: Date,
 
     #[serde(default)]
@@ -30,25 +28,15 @@ pub struct WorkMeta {
     pub sns_links: Vec<Url>,
 }
 
-impl RenderImageMetadata for &WorkMeta {
-    fn render_image_meta(&self, image: Tracker<'_, Image>) -> maud::Markup {
-        if let Some(thumbnail) = &self.thumbnail {
-            let path = make_path_relative("images", thumbnail);
-            match image
-                .get(path)
-                .ok()
-                .map(|img| img.get(ImageFormat::WebP))
-                .flatten()
-                .map(|path| path.as_str())
-            {
-                Some(img) => html! {
-                    meta property="og:image" content=(img);
-                },
-                None => html! {},
-            }
-        } else {
-            html! {}
-        }
+impl RenderableMetadata for &WorkMeta {
+    fn render_image_meta(&self) -> Option<maud::Markup> {
+        Some(html! {
+            meta property="og:image" content="images/thumbnail.jpg";
+        })
+    }
+
+    fn section(&self) -> Sections {
+        Sections::WorksPost
     }
 }
 

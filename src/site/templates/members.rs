@@ -1,24 +1,19 @@
+use eyre::Report;
+use maud::{Markup, PreEscaped, html};
 use std::collections::HashMap;
 
-use crate::album::AlbumMeta;
-use crate::member::MemberMeta;
-use crate::metadata::Metadata;
-use crate::news::NewsMeta;
-use crate::site::news::SiteData;
-use crate::sitemap::SiteMap;
-use crate::templates::base::base;
-use crate::templates::functions::sns::sns_icon;
-use crate::templates::news::{post_reference, post_thumbnail};
-use crate::templates::partials::navbar::Sections;
-use crate::templates::works::{album_reference, thumbnail_link, work_reference};
-use crate::util::image;
-use crate::work::WorkMeta;
-use hauchiwa::Context;
-use hauchiwa::RuntimeError;
-use maud::{Markup, PreEscaped, html};
+use crate::site::{
+    album::AlbumMeta,
+    member::MemberMeta,
+    news::NewsMeta,
+    sitemap::SiteMap,
+    templates::{functions::sns::sns_icon, works::work_reference},
+    util::hash,
+    work::WorkMeta,
+};
 
-pub fn members(sack: &Context<SiteData>, site_map: &SiteMap) -> Result<Markup, RuntimeError> {
-    let inner = html! {
+pub fn members(site_map: &SiteMap) -> Result<PreEscaped<String>, Report> {
+    Ok(html! {
         section #members-hero {
             .container {
                 h2 { "メンバー紹介" }
@@ -29,35 +24,23 @@ pub fn members(sack: &Context<SiteData>, site_map: &SiteMap) -> Result<Markup, R
         section #staff-members {
             .zcontainer {
                 .member-grid {
-                    @for member in &site_map.members {
-                        (member_card(sack, member)?)
+                    @for member in site_map.members.values() {
+                        (member_card(member)?)
                     }
                 }
             }
         }
-    };
-
-    let metadata = Metadata {
-        page_title: "メンバー紹介 - 東京大学ボカロP同好会".to_string(),
-        page_image: None,
-        canonical_link: "/members.html".to_string(),
-        section: Sections::Members,
-        description: Some("東京大学ボカロP同好会のメンバー紹介".to_string()),
-        author: None,
-        date: None,
-    };
-
-    base(sack, &metadata, None, inner)
+    })
 }
 
-pub fn member_card(sack: &Context<SiteData>, member: &MemberMeta) -> Result<Markup, RuntimeError> {
+pub fn member_card(member: &MemberMeta) -> Result<Markup, Report> {
     let member_links_len = member.links.len();
     Ok(html! {
         .member-item {
             a .member-link href=(format!("/members/{}.html", member.ascii_name)) {
                 .member-card {
                     .member-image .img-placeholder {
-                        img .member-image .img-placeholder src=(image(sack, format!("images/icon/{}.jpg", member.ascii_name))?) alt=(member.name);
+                        img .member-image .img-placeholder src=(format!("images/icon/{}.jpg", member.ascii_name)) alt=(member.name);
                     }
                     .member-info #(member.ascii_name) {
                         h3 { (member.name) }
@@ -74,7 +57,7 @@ pub fn member_card(sack: &Context<SiteData>, member: &MemberMeta) -> Result<Mark
                                 .social-icon-size style="visibility: hidden" {}
                             }
                             @for link in &member.links {
-                                (sns_icon(sack, link)?)
+                                (sns_icon(link)?)
                             }
                         }
                     }
@@ -86,30 +69,28 @@ pub fn member_card(sack: &Context<SiteData>, member: &MemberMeta) -> Result<Mark
 
 // TODO: add "worked on albums" and "posts".
 pub fn member_detail(
-    sack: &Context<SiteData>,
     member: &MemberMeta,
     site_map: &SiteMap,
-    namemap: &HashMap<String, String>,
-    content: &str,
-) -> Result<Markup, RuntimeError> {
-    let this_featured_work = site_map
+    content: String,
+) -> Result<Markup, Report> {
+    let recent_works = site_map
         .works
         .iter()
-        .filter(|featured| featured.author == member.ascii_name && featured.featured)
+        .filter(|featured| featured.authors.contains(&member.ascii_name))
         .take(5)
         .collect::<Vec<&WorkMeta>>();
 
-    let featured_posts = site_map
+    let recent_posts = site_map
         .news
         .iter()
         .filter(|post| post.author.as_ref() == Some(&member.ascii_name))
         .take(5)
         .collect::<Vec<&NewsMeta>>();
 
-    let featured_albums = site_map
+    let recent_albums = site_map
         .albums
         .iter()
-        .filter(|album| album.contributors.contains(&member.ascii_name))
+        .filter(|album| album.authors.contains(&member.ascii_name))
         .take(5)
         .collect::<Vec<&AlbumMeta>>();
 
@@ -118,7 +99,7 @@ pub fn member_detail(
             .member-detail-container {
                 .member-profile {
                     .member-profile-image {
-                        img .img-placeholder src=(image(sack, format!("images/icon/{}.jpg", member.ascii_name))?) alt=(member.name);
+                        img .img-placeholder src=(format!("images/icon/{}.jpg", member.name)) alt=(member.name);
                     }
                     .member-profile-info {
                         h2 { (member.name) }
@@ -130,7 +111,7 @@ pub fn member_detail(
                         }
                         .member-links {
                             @for link in &member.links {
-                                (sns_icon(sack, link)?)
+                                (sns_icon(link)?)
                             }
                         }
                     }
@@ -141,10 +122,10 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "代表作品" }
                     .container {
-                        @for featured in &this_featured_work {
+                        @for featured in &recent_works {
                             (featured_work_item_detail(sack, featured)?)
                         }
-                        @if this_featured_work.is_empty() {
+                        @if recent_works.is_empty() {
                             p .work-description style="text-align: center;" {
                                 em {
                                     "代表作品がありません。"
@@ -194,23 +175,16 @@ pub fn member_detail(
             }
         }
     };
-
-    let metadata = MemberMeta::to_metadata(member.clone());
-
-    base(sack, &metadata, None, inner)
 }
 
-pub fn featured_work_item_detail(
-    sack: &Context<SiteData>,
-    item: &WorkMeta,
-) -> Result<Markup, RuntimeError> {
-    let work_ref = work_reference(&item.title, &item.author);
+pub fn featured_work_item_detail(item: &WorkMeta) -> Result<Markup, Report> {
+    let work_ref = work_reference(&item.title, hash(item));
 
     Ok(html! {
         .work-item-detail id=(work_ref) {
             h4 { (item.title) }
             .work-youtube-container {
-                img .work-item-thumb src=(thumbnail_link(sack, item)?) alt=(item.title) {}
+                img .work-item-thumb src=(thumbnail_link(item)?) alt=(item.title) {}
             }
 
             .work-description {
@@ -226,14 +200,11 @@ pub fn featured_work_item_detail(
     })
 }
 
-pub fn featured_post_detail(
-    sack: &Context<SiteData>,
-    item: &NewsMeta,
-) -> Result<Markup, RuntimeError> {
+pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, RuntimeError> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .post-img src=(post_thumbnail(sack, item)?) {}
+                img .post-img src=(post_thumbnail(item)?) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {

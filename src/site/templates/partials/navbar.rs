@@ -36,7 +36,21 @@ impl Sections {
 
 impl Display for Sections {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?}")
+        let name = match self {
+            Sections::Home => "ホームページ",
+            Sections::Members => "メンバーご覧",
+            Sections::MemberProfile => "i love amongus sooo much!",
+            Sections::Activities => "活動内容",
+            Sections::Join => "参加情報",
+            Sections::News => "ニュースご覧",
+            Sections::NewsPost => "i love the world and everything in it",
+            Sections::Works => "メンバー作品ご覧",
+            Sections::WorksPost => "join WSOC!",
+            Sections::AlbumPost => {
+                "john [ano] numba one wynncraf' guild wi' da fines' bri'ish lads around"
+            }
+        };
+        write!(f, "{name}")
     }
 }
 
@@ -57,7 +71,6 @@ pub fn navbar(current_section: Sections) -> Markup {
                         (navbar_item("/join.html", current_section == Sections::Join, "入会案内"))
                         (navbar_item("/works.html", current_section == Sections::Works || current_section == Sections::WorksPost, "リリース"))
                         (navbar_item("/news.html", current_section == Sections::News || current_section == Sections::NewsPost, "ニュース"))
-
                     }
                 }
             }

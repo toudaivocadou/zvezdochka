@@ -1,40 +1,45 @@
-use hauchiwa::{
-    Tracker,
-    loader::{Image, image::ImageFormat},
-};
-use maud::{Render, html};
+use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::site::{metadata::RenderImageMetadata, templates::partials::navbar::Sections};
+use crate::site::{metadata::RenderableMetadata, templates::partials::navbar::Sections};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum WorkTitleOrSource {
+    Source(Url),
+    Title(String),
+}
+
+#[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct MemberMeta {
     pub name: String,       // 活動名
     pub ascii_name: String, // 英語のみあり活動名（活動名発音方法） - 注意: これを使ってアイコンのファイルを探します. ケース・センシティブ!!!!!
 
+    #[serde(default)]
     pub department: Option<String>, // 学部
-    pub position: Option<String>,   // 役職
-    pub entry_year: Option<i32>,    // 入年
-    pub short: String,              // 自己紹介（短い）
+    #[serde(default)]
+    pub position: Option<String>, // 役職
+    #[serde(default)]
+    pub entry_year: Option<i32>, // 入年
+    pub short: String, // 自己紹介（短い）
 
+    #[serde(default)]
     pub links: Vec<Url>, // SNSリンク
+
+                         // #[serde(default)]
+                         // pub featured_works: Vec<WorkTitleOrSource>,
 }
 
-impl RenderImageMetadata for &MemberMeta {
-    fn render_image_meta(&self, image: Tracker<'_, Image>) -> maud::Markup {
-        let path = image
-            .get(format!("images/icon/{}.jpg", &self.ascii_name))
-            .ok()
-            .map(|img| img.get(ImageFormat::WebP))
-            .flatten()
-            .map(|path| path.as_str());
-        match path {
-            Some(p) => html! {
-                meta property="og:image" content=(p);
-            },
-            None => html! {},
-        }
+impl RenderableMetadata for &MemberMeta {
+    fn render_image_meta(&self) -> Option<Markup> {
+        Some(html! {
+            meta property="og:image" content=(format!("images/icon/{}.jpg", &self.ascii_name));
+        })
+    }
+
+    fn section(&self) -> Sections {
+        Sections::MemberProfile
     }
 }
 

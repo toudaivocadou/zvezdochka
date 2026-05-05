@@ -1,18 +1,17 @@
-use crate::SiteData;
-use crate::album::AlbumMeta;
-use crate::die_linky::SocialLinkType;
-use crate::metadata::Metadata;
+use crate::site::SiteData;
+use crate::site::album::AlbumMeta;
+use crate::site::die_linky::SocialLinkType;
+use crate::site::sitemap::SiteMap;
 use crate::site::sitemap::{AlbumRef, WorkRef};
-use crate::sitemap::SiteMap;
-use crate::templates::base::base;
-use crate::templates::functions::embed::embed;
-use crate::templates::functions::sns::sns_icon;
-use crate::templates::partials::navbar::Sections;
-use crate::util::{image, shorten};
-use crate::work::WorkMeta;
+use crate::site::templates::base::base;
+use crate::site::templates::functions::embed::embed;
+use crate::site::templates::functions::sns::sns_icon;
+use crate::site::templates::partials::navbar::Sections;
+use crate::site::util::{image, shorten};
+use crate::site::work::WorkMeta;
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
-use hauchiwa::{Context, RuntimeError};
+use hauchiwa::error::HauchiwaError;
 use maud::{Markup, PreEscaped, html};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -394,13 +393,10 @@ pub fn album_detail(
 }
 
 pub fn work_detail(
-    sack: &Context<SiteData>,
+    sack: &SiteData,
     work_meta: &WorkMeta,
-    name_map: &HashMap<String, String>,
     content: &str,
-) -> Result<Markup, RuntimeError> {
-    let author_name = name_map.get(&work_meta.author).expect("Could not find author. Does the member page exist? Did you remember to type in the ascii name? Did you mistype it? Yell at peg for more info");
-
+) -> Result<Markup, HauchiwaError> {
     let inner = html! {
         section #work-section {
             .work-detail-container {
@@ -472,55 +468,5 @@ pub fn work_detail(
         }
     };
 
-    let page_image = match &work_meta.display {
-        crate::work::CoverOrImage::Cover(cover) => Some(cover.to_string()),
-        crate::work::CoverOrImage::Link(url) => Some(url.to_string()),
-        crate::work::CoverOrImage::AudioFile(_) => None,
-    };
-
-    let metadata = Metadata {
-        page_title: work_meta.title.clone(),
-        page_image,
-        canonical_link: format!("/works/releases/{}.html", work_meta.title),
-        section: Sections::WorksPost,
-        description: Some(work_meta.short.clone().unwrap_or(shorten(content))),
-        author: Some(work_meta.author.clone()),
-        date: Some(work_meta.date.to_string()),
-    };
     base(sack, &metadata, Some(&[]), inner)
-}
-
-pub fn thumbnail_link(sack: &Context<SiteData>, meta: &WorkMeta) -> Result<String, RuntimeError> {
-    match &meta.display {
-        crate::work::CoverOrImage::Cover(cover) => image(sack, cover),
-        crate::work::CoverOrImage::Link(url) => get_link_image_thumb(sack, url.as_str()),
-        crate::work::CoverOrImage::AudioFile(_audio_file) => Ok("".to_string()),
-    }
-}
-
-pub fn get_link_image_thumb(sack: &Context<SiteData>, link: &str) -> Result<String, RuntimeError> {
-    let url_type =
-        SocialLinkType::from_str(link).map_err(|why| RuntimeError::msg(why.to_string()))?;
-    let url_parse = Url::parse(link).map_err(|why| RuntimeError::msg(why.to_string()))?;
-
-    match url_type {
-        SocialLinkType::Youtube => {
-            let youtube_video_id = url_parse
-                .query_pairs()
-                .find(|(key, _)| key == "v")
-                .ok_or(RuntimeError::msg("Invalid youtube id"))?
-                .1;
-            Ok(format!(
-                "https://img.youtube.com/vi/{}/maxresdefault.jpg",
-                youtube_video_id
-            ))
-        }
-        SocialLinkType::NicoDouga => {
-            // FIXME: NND is fucking cringe and you need some sort of key to download their thumbs.
-            // use request and fetch the thumbnails and host them locally.
-            // Until then, lol.
-            image(sack, "images/gray.jpg")
-        }
-        _ => image(sack, "images/gray.jpg"),
-    }
 }

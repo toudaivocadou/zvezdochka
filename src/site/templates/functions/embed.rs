@@ -1,14 +1,13 @@
-use crate::die_linky::SocialLinkType;
-use anyhow::Error;
+use eyre::Report;
 use maud::{Render, html};
 use minijinja::{Error as JinjaError, ErrorKind};
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
-use urlencoding::encode;
 
-pub fn embed(link: &str) -> Result<impl Render, Error> {
+use crate::site::die_linky::SocialLinkType;
+
+pub fn embed(link: &str) -> Result<impl Render, Report> {
     if link.ends_with(".png")
         || link.ends_with(".jpeg")
         || link.ends_with(".jpg")
@@ -30,8 +29,8 @@ pub fn embed(link: &str) -> Result<impl Render, Error> {
         });
     }
 
-    let url_type = SocialLinkType::from_str(link).unwrap();
-    let url_parse = Url::parse(link).unwrap();
+    let url_parse = Url::parse(link)?;
+    let url_type = SocialLinkType::from_url(&url_parse)?;
 
     match url_type {
         SocialLinkType::Twitter | SocialLinkType::Xitter => Ok(html! {
@@ -40,36 +39,43 @@ pub fn embed(link: &str) -> Result<impl Render, Error> {
                 a href=(link);
             }
         }),
+        // Im not really comfortable with the
+        // site-generator making HTTP requests at runtime
+        // so bluesky will have to go for now :sob:
         SocialLinkType::Bluesky => {
-            let link_encoded = encode(link);
-            let bluesky_oembed = reqwest::blocking::get(format!(
-                "https://embed.bsky.app/oembed?url={}",
-                link_encoded
-            ))?;
+            // let link_encoded = encode(link);
+            // let bluesky_oembed = reqwest::blocking::get(format!(
+            //     "https://embed.bsky.app/oembed?url={}",
+            //     link_encoded
+            // ))?;
 
-            if bluesky_oembed.status() != StatusCode::OK {
-                return Err(Error::msg("failed to get bluesky embed"));
-            }
+            // if bluesky_oembed.status() != StatusCode::OK {
+            //     return Err(Report::msg("failed to get bluesky embed"));
+            // }
 
-            let embed_html = bluesky_oembed.json::<OEmbed>()?;
+            // let embed_html = bluesky_oembed.json::<OEmbed>()?;
 
-            if let Some(html) = embed_html.html {
-                return Ok(html! { (html) });
-            } else if let Some(image) = embed_html.url {
-                return Ok(html! {
-                    a href=(link) {
-                        img src=(image) alt=(link);
-                    }
-                });
-            }
+            // if let Some(html) = embed_html.html {
+            //     return Ok(html! { (html) });
+            // } else if let Some(image) = embed_html.url {
+            //     return Ok(html! {
+            //         a href=(link) {
+            //             img src=(image) alt=(link);
+            //         }
+            //     });
+            // }
 
-            Err(Error::msg("returned oembed did not match any known items."))
+            // Err(Error::msg("returned oembed did not match any known items."))
+
+            Err(Report::msg(format!(
+                "Bluesky is currently not supported for making embeds. If you actually run into this issue let peng know! {link}"
+            )))
         }
         SocialLinkType::Youtube => {
             let youtube_video_id = url_parse
                 .query_pairs()
                 .find(|(key, _)| key == "v")
-                .ok_or(Error::msg("invalid youtube link"))?
+                .ok_or(Report::msg(format!("invalid youtube link: {link}")))?
                 .1;
             let embed_link = format!("https://www.youtube.com/embed/{youtube_video_id}");
 
@@ -82,9 +88,13 @@ pub fn embed(link: &str) -> Result<impl Render, Error> {
         SocialLinkType::NicoDouga => {
             let nnd_video_id = url_parse
                 .path_segments()
-                .ok_or(Error::msg("invalid nnd link"))?
+                .ok_or(Report::msg(Report::msg(format!(
+                    "invalid NND link: {link}"
+                ))))?
                 .find(|segment| segment.starts_with("sm"))
-                .ok_or(Error::msg("no id in nnd link"))?;
+                .ok_or(Report::msg(Report::msg(format!(
+                    "No ID found in NND link: {link}"
+                ))))?;
             let nnd_video_link = format!("https://embed.nicovideo.jp/watch/{nnd_video_id}");
             Ok(html! {
                 .youtube-embed-container {
@@ -92,7 +102,9 @@ pub fn embed(link: &str) -> Result<impl Render, Error> {
                 }
             })
         }
-        _ => Err(Error::msg("unsupported embed type")),
+        _ => Err(Report::msg(format!(
+            "unknown/unsupported embed type: {link}"
+        ))),
     }
 
     // soundcloud embed

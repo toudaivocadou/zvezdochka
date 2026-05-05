@@ -1,21 +1,13 @@
-use crate::SiteData;
-use crate::metadata::Metadata;
-use crate::templates::partials::footer::footer;
-use crate::templates::partials::head::html_head;
-use crate::templates::partials::navbar::navbar;
-use hauchiwa::{Context, RuntimeError};
+use eyre::Report;
 use maud::{DOCTYPE, Markup, Render, html};
 
-pub fn base<'a, Meta>(
-    sack: &Context<SiteData>,
-    header_metadata: &'a Meta,
-    scripts: Option<&[&str]>,
+use crate::site::templates::partials::head::html_head;
+
+pub fn base(
+    metadata: &impl Render,
     inner: impl Render,
-) -> Result<Markup, RuntimeError>
-where
-    &'a Meta: Into<&'a Metadata>,
-{
-    let metadata = Into::into(header_metadata);
+    scripts: Option<&[&str]>,
+) -> Result<Markup, Report> {
     let scripts = match scripts {
         Some(s) => s,
         None => &[],
@@ -24,7 +16,7 @@ where
     Ok(html! {
         (DOCTYPE)
         html lang="ja" {
-            (html_head(sack, metadata, scripts)?)
+            (html_head(metadata, scripts)?)
             body {
                 (navbar(metadata.section))
                 .main-content-container {
