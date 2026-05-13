@@ -11,7 +11,7 @@ pub enum WorkTitleOrSource {
     Title(String),
 }
 
-#[derive(Clone, Debug, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct MemberMeta {
     pub name: String,       // 活動名
     pub ascii_name: String, // 英語のみあり活動名（活動名発音方法） - 注意: これを使ってアイコンのファイルを探します. ケース・センシティブ!!!!!
@@ -34,12 +34,16 @@ pub struct MemberMeta {
 impl RenderableMetadata for &MemberMeta {
     fn render_image_meta(&self) -> Option<Markup> {
         Some(html! {
-            meta property="og:image" content=(format!("images/icon/{}.jpg", &self.ascii_name));
+            meta property="og:image" content=(format!("icon/{}.jpg", &self.ascii_name));
         })
     }
 
     fn section(&self) -> Sections {
         Sections::MemberProfile
+    }
+
+    fn title(&self) -> &str {
+        &self.name
     }
 }
 

@@ -4,8 +4,8 @@ use time::Date;
 use url::Url;
 
 use crate::site::{
-    metadata::RenderableMetadata, sitemap::MemberRef, templates::partials::navbar::Sections,
-    util::format_date,
+    album::Illustration, metadata::RenderableMetadata, sitemap::MemberRef,
+    templates::partials::navbar::Sections, util::format_date,
 };
 
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
@@ -21,9 +21,10 @@ pub struct WorkMeta {
     pub short: Option<String>,
 
     #[serde(default)]
-    pub thumbnail: Option<String>,
+    pub thumbnail: Option<Illustration>,
 
-    pub source: Url,
+    #[serde(default)]
+    pub source: Option<Url>,
     #[serde(default)]
     pub sns_links: Vec<Url>,
 }
@@ -31,12 +32,16 @@ pub struct WorkMeta {
 impl RenderableMetadata for &WorkMeta {
     fn render_image_meta(&self) -> Option<maud::Markup> {
         Some(html! {
-            meta property="og:image" content="images/thumbnail.jpg";
+            meta property="og:image" content="thumbnail.jpg";
         })
     }
 
     fn section(&self) -> Sections {
         Sections::WorksPost
+    }
+
+    fn title(&self) -> &str {
+        &self.title
     }
 }
 

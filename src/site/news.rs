@@ -33,6 +33,10 @@ impl RenderableMetadata for &NewsMeta {
     fn section(&self) -> Sections {
         Sections::NewsPost
     }
+
+    fn title(&self) -> &str {
+        &self.title
+    }
 }
 
 impl Render for &NewsMeta {

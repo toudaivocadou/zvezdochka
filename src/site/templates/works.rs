@@ -1,30 +1,15 @@
-use crate::site::SiteData;
 use crate::site::album::AlbumMeta;
-use crate::site::die_linky::SocialLinkType;
 use crate::site::sitemap::SiteMap;
-use crate::site::sitemap::{AlbumRef, WorkRef};
-use crate::site::templates::base::base;
 use crate::site::templates::functions::embed::embed;
 use crate::site::templates::functions::sns::sns_icon;
-use crate::site::templates::partials::navbar::Sections;
-use crate::site::util::{image, shorten};
+use crate::site::util::image_or_gray;
+use crate::site::util::{author_list, reference};
 use crate::site::work::WorkMeta;
-use base64::Engine;
-use base64::prelude::BASE64_URL_SAFE_NO_PAD;
-use hauchiwa::error::HauchiwaError;
+use eyre::Report;
 use maud::{Markup, PreEscaped, html};
-use std::collections::HashMap;
-use std::str::FromStr;
-use url::Url;
 
-pub fn works(
-    sack: &Context<SiteData>,
-    site_map: &SiteMap,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
-    // TODO: pagination. this will get ungodly long. yell at peng if we get >100!
-
-    let inner = html! {
+pub fn works(site_map: &SiteMap) -> Result<Markup, Report> {
+    Ok(html! {
         section #hero {
             .container {
                 h2 { "リリース" }
@@ -55,7 +40,7 @@ pub fn works(
                 .zcontainer {
                     .member-grid {
                         @for work in &site_map.works {
-                            (work_card(sack, work, name_map)?)
+                            (work_card(site_map, work)?)
                         }
                         @if site_map.works.is_empty() {
                             p .work-description style="text-align: center;" {
@@ -77,7 +62,7 @@ pub fn works(
                 .zcontainer {
                     .member-grid {
                         @for album in &site_map.albums {
-                            (album_card(sack, album, name_map)?)
+                            (album_card(site_map, album)?)
                         }
                         @if site_map.albums.is_empty() {
                             p .work-description style="text-align: center;" {
@@ -90,46 +75,34 @@ pub fn works(
                 }
             }
         }
-    };
+    })
 
-    let metadata = Metadata {
-        page_title: "リリース".to_string(),
-        page_image: None,
-        canonical_link: "/works.html".to_string(),
-        section: Sections::Works,
-        description: Some("東京大学ボカロP同好会のメンバーの作品展示館".to_string()),
-        author: None,
-        date: None,
-    };
-
-    base(sack, &metadata, Some(&[]), inner)
+    // let metadata = Metadata {
+    //     page_title: "リリース".to_string(),
+    //     page_image: None,
+    //     canonical_link: "/works.html".to_string(),
+    //     section: Sections::Works,
+    //     description: Some("東京大学ボカロP同好会のメンバーの作品展示館".to_string()),
+    //     author: None,
+    //     date: None,
+    // };
 }
 
-pub fn work_card(
-    sack: &Context<SiteData>,
-    work_meta: &WorkMeta,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
-    let author_name = name_map.get(&work_meta.author).ok_or(RuntimeError::msg("Could not find author. Does the member page exist? Did you remember to type in the ascii name? Did you mistype it?".to_string()))?;
-
+pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Report> {
     Ok(html! {
         .work-item {
-            a .member-link href=(format!("/works/releases/{}.html", work_reference(&work_meta.title, &work_meta.author))) {
+            a .member-link href=(format!("/works/releases/{}.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))) {
                 .work-card {
                     h4 .member-info {
-                        a .member-link href=(format!("/works/releases/{}.html", work_reference(&work_meta.title, &work_meta.author))){
+                        a .member-link href=(format!("/works/releases/{}.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))){
                             (work_meta.title)
                         }
                     }
                     .work-thumbnail {
-                        img .work-item-thumb src=(thumbnail_link(sack, work_meta)?) alt=(work_meta.title) {}
+                        img .work-item-thumb src=(image_or_gray(work_meta.thumbnail.as_ref().map(|x| &x.image))) alt=(work_meta.title) {}
                     }
                     .work-description {
-                        a href=(format!("/members/{}.html", work_meta.author)) {
-                            p .member-role {
-                                (author_name)
-                            }
-                        }
+                        (author_list(sitemap, &work_meta.authors, &work_meta.additional_authors))
                         p .work-date {
                             (work_meta.date)
                         }
@@ -143,59 +116,37 @@ pub fn work_card(
     })
 }
 
-pub fn work_reference(title: &str, hash: u64) -> WorkRef {
-    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
-
-    WorkRef(format!("{}-{}", urlencoding::encode(title), cachebust))
-}
-
-pub fn album_reference(title: &str, hash: u64) -> AlbumRef {
-    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
-
-    AlbumRef(format!("{}-{}", urlencoding::encode(title), cachebust))
-}
-
-pub fn album_card(
-    sack: &Context<SiteData>,
-    album_meta: &AlbumMeta,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
-    let contribs = format!(
-        "{}...",
-        album_meta
-            .contributors_str(name_map)
-            .chars()
-            .take(18)
-            .collect::<String>()
-    );
+pub fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Report> {
     Ok(html! {
         .work-item {
             a .member-link href=(
-                format!("/works/albums/{}.html", album_reference(&album_meta.title, &album_meta.front_cover))
+                format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
             ) {
                 .work-card {
                     h4 .member-info {
                         a href=(
-                            format!("/works/albums/{}.html", album_reference(&album_meta.title, &album_meta.front_cover))
+                            format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
                         ) {
                             (album_meta.title)
                         }
                     }
                     .work-thumbnail {
-                        img .work-item-thumb src=(image(sack, format!("images/{}", &album_meta.front_cover))?) alt=(&album_meta.title) {}
+                        img .work-item-thumb src=(&album_meta.thumbnail.image) alt=(&album_meta.title) {}
                     }
                     .work-description {
                         p .member-role {
-                            (contribs)
+                            (author_list(sitemap, &album_meta.authors, &album_meta.additional_authors))
                         }
                         p .work-date {
-                            (album_meta.release_date)
-                        }
-                        @if let Some(subtitle) = &album_meta.subtitle {
-                            p { (subtitle) }
+                            (album_meta.date)
                         }
                         p {
-                            (album_meta.short)
+                            @if let Some(short) = &album_meta.short {
+                                (short)
+                            }
+                            @else {
+                                i { "説明がありません" }
+                            }
                         }
                     }
                 }
@@ -205,51 +156,36 @@ pub fn album_card(
 }
 
 pub fn album_detail(
-    sack: &Context<SiteData>,
+    sitemap: &SiteMap,
     album_meta: &AlbumMeta,
-    name_map: &HashMap<String, String>,
     content: &str,
-) -> Result<Markup, RuntimeError> {
-    let contributors = album_meta.contributors.iter().map(|contributor| {
-        let ascii_name = name_map.get(contributor).unwrap();
-        html! {
-            a href=(format!("/members/{}.html", ascii_name)) {
-                (contributor)
-            }
-        }
-    });
-
-    let extra_contributors = album_meta.extra_contributors.iter();
-
-    let inner = html! {
+) -> Result<Markup, Report> {
+    Ok(html! {
         section #work-section {
             .work-detail-container {
                 .work-detail {
                     .work-image {
-                        img .img-placeholder src=(image(sack, format!("images/{}", &album_meta.front_cover))?) alt=(album_meta.title);
+                        img .img-placeholder src=(album_meta.thumbnail.image) alt=(album_meta.title);
                     }
                     .work-info {
                         h2 { (album_meta.title) }
-                        @if let Some(subtitle) = &album_meta.subtitle {
-                            p { (subtitle) }
+                        @if let Some(short) = &album_meta.short {
+                            p { (short) }
                         }
                         .work-contributors {
-                            p {
-                                "投稿者: "
-                                @for contrib in contributors {
-                                    (contrib) " "
-                                }
-                                @for extrac in extra_contributors {
-                                    (extrac) " "
-                                }
-                            }
+                            "投稿者: " (author_list(sitemap, &album_meta.authors, &album_meta.additional_authors))
                         }
                         p {
-                            (album_meta.short)
+                            @if let Some(short) = &album_meta.short {
+                                (short)
+                            }
+                            @else {
+                                i { "説明がありません" }
+                            }
                         }
                         .member-links {
                             @for link in &album_meta.sns_links {
-                                (sns_icon(sack, link.as_str())?)
+                                (sns_icon(link)?)
                             }
                         }
                     }
@@ -260,17 +196,13 @@ pub fn album_detail(
                 section #tracklist {
                     h2 { "トラックリスト" }
                     dl .tracklist-list  {
-                        @for (number, track) in album_meta.tracklist.iter().enumerate() {
+                        @for (number, track) in album_meta.tracks.iter().enumerate() {
                             .tracklist-track {
                                 dt .track-title {
                                     h2 {
                                         (number + 1) ". "
-                                        @if track.on_site {
-                                            a href=(work_reference(&track.title, &track.author)) {
-                                                (track.title)
-                                            }
-                                        } @else if let Some(link) = &track.link {
-                                            a href=(link) {
+                                        @if !track.external {
+                                            a href=(reference(&track.title, &track.authors, &track.additional_authors)) {
                                                 (track.title)
                                             }
                                         } @else {
@@ -279,28 +211,17 @@ pub fn album_detail(
                                     }
                                 }
                                 dd .track-author {
-                                    "投稿者: "
-                                    @if track.external_author {
-                                        (track.author)
-                                    } @else {
-                                        a href=(format!("/members/{}.html", &track.author)) {
-                                            (name_map.get(&track.author).ok_or(RuntimeError::msg("User does not exist in album"))?)
-                                        }
-                                    }
+                                    (author_list(sitemap, &track.authors, &track.additional_authors))
                                 }
-                                @if let Some(duration_seconds) = track.duration_seconds {
+                                @if let Some(duration) = track.duration {
                                     dd .track-length {
-                                        ({
-                                            let minutes = duration_seconds / 60;
-                                            let seconds = duration_seconds % 60;
-                                            format!("{}:{:02}", minutes, seconds)
-                                        })
+                                        (duration)
                                     }
                                 }
                             }
                         }
                     }
-                    @if let Some(link) = &album_meta.playlist_link {
+                    @if let Some(link) = &album_meta.link {
                         .click-button {
                             a href=(link) alt=(&album_meta.title) {
                                 p { "プレイリストに行く" }
@@ -318,7 +239,7 @@ pub fn album_detail(
 
                 section #crossfade {
                     h2 { "試聴動画" }
-                    @if let Some(crossfade_demonstration) = &album_meta.crossfade_demonstration {
+                    @if let Some(crossfade_demonstration) = &album_meta.demonstration {
                         .work-youtube-container {
                             .youtube-embed-container {
                                 (embed(crossfade_demonstration.as_str())?)
@@ -338,30 +259,17 @@ pub fn album_detail(
                         .work-item-detail #frontcover {
                             h4 { "フロントカーバー" }
                             .work-illustration-container {
-                                img .work-item-thumb src=(image(sack, format!("images/{}", &album_meta.front_cover))?) alt=(album_meta.title);
+                                img .work-item-thumb src=(album_meta.thumbnail.image) alt=(album_meta.title);
                             }
-                            @if album_meta.front_cover_illustrator_not_on_site {
-                                p {"イラスト: " (album_meta.front_cover_illustrator) }
-                            }
-                            @else {
-                                a href=(format!("/members/{}.html", album_meta.front_cover_illustrator)) {
-                                    p { "イラスト: " (name_map.get(&album_meta.front_cover_illustrator).ok_or(RuntimeError::msg("did not find front cover illustrator on site"))?) }
-                                }
-                            }
+                            p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                         }
-                        @for (header, imglnk) in &album_meta.other_covers {
-                            .work-item-detail #(header) {
-                                h4 { (header) }
+                        @for illustration in &album_meta.illustrations {
+                            .work-item-detail #(format!("illustration-{}", illustration.title)) {
+                                h4 { (illustration.title) }
                                 .work-illustration-container {
-                                    img .img-placeholder src=(image(sack, format!("images/{}", imglnk.link))?) alt=(header);
+                                    img .img-placeholder src=(illustration.image) alt=(illustration.title);
                                 }
-                                @if imglnk.illustrator_is_not_on_site {
-                                    p { "イラスト: " (imglnk.illustrator) }
-                                } @else {
-                                    a href=(format!("/members/{}.html", imglnk.illustrator)) {
-                                        p { "イラスト: " (name_map.get(&imglnk.illustrator).ok_or(RuntimeError::msg("did not find illustrator on site"))?) }
-                                    }
-                                }
+                                p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                             }
                         }
                     }
@@ -375,52 +283,51 @@ pub fn album_detail(
                 }
             }
         }
-    };
+    })
 
-    let metadata = Metadata {
-        page_title: album_meta.title.clone(),
-        page_image: None,
-        canonical_link: format!(
-            "/works/albums/{}.html",
-            album_reference(&album_meta.title, &album_meta.front_cover)
-        ),
-        section: Sections::AlbumPost,
-        description: Some(album_meta.short.clone()),
-        author: Some(album_meta.contributors_str(name_map)),
-        date: Some(album_meta.release_date.to_string()),
-    };
-    base(sack, &metadata, Some(&[]), inner)
+    // let metadata = Metadata {
+    //     page_title: album_meta.title.clone(),
+    //     page_image: None,
+    //     canonical_link: format!(
+    //         "/works/albums/{}.html",
+    //         album_reference(&album_meta.title, &album_meta.front_cover)
+    //     ),
+    //     section: Sections::AlbumPost,
+    //     description: Some(album_meta.short.clone()),
+    //     author: Some(album_meta.contributors_str(name_map)),
+    //     date: Some(album_meta.release_date.to_string()),
+    // };
 }
 
 pub fn work_detail(
-    sack: &SiteData,
+    sitemap: &SiteMap,
     work_meta: &WorkMeta,
     content: &str,
-) -> Result<Markup, HauchiwaError> {
-    let inner = html! {
+) -> Result<Markup, Report> {
+    Ok(html! {
         section #work-section {
             .work-detail-container {
                 .work-detail {
                     .work-thumbnail {
-                        img .img-placeholder src=(thumbnail_link(sack, work_meta)?) alt=(work_meta.title);
+                        img .img-placeholder src=(image_or_gray(work_meta.thumbnail.as_ref().map(|x| &x.image))) alt=(work_meta.title);
                     }
                     .work-info {
                         h2 { (work_meta.title) }
-                        .work-featured-work {
-                            @if work_meta.featured {
-                                h5 { "⭐: このリリースはメンバーページでフィーチャーされています。" }
-                            }
-                        }
+                        // .work-featured-work {
+                        //     @if work_meta.featured {
+                        //         h5 { "⭐: このリリースはメンバーページでフィーチャーされています。" }
+                        //     }
+                        // }
                         .work-date {
                             p { (work_meta.date) }
                         }
-                        a .member-role .member-bio href=(format!("/members/{}.html", work_meta.author)) { p { (author_name) } }
+                        p { "投稿者: " (author_list(sitemap, &work_meta.authors, &work_meta.additional_authors)) }
                         @if let Some(short) = &work_meta.short {
                             p .work-bio { (short) }
                         }
                         .member-links {
-                            @for link in &work_meta.streaming {
-                                (sns_icon(sack, link)?)
+                            @for link in &work_meta.sns_links {
+                                (sns_icon(link)?)
                             }
                         }
                     }
@@ -430,7 +337,7 @@ pub fn work_detail(
             .member-works-container {
                 section .work-featured-work-container {
                     h2 { "作品リンク" }
-                    @if let Some(link) = &work_meta.link {
+                    @if let Some(link) = &work_meta.source {
                         .youtube-embed-container {
                             (embed(link.as_str())?)
                         }
@@ -466,7 +373,5 @@ pub fn work_detail(
                 }
             }
         }
-    };
-
-    base(sack, &metadata, Some(&[]), inner)
+    })
 }

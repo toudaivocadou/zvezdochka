@@ -1,14 +1,17 @@
 use crate::site::templates::partials::navbar::Sections;
 use maud::{Markup, Render, html};
 use serde::Serialize;
+use std::hash::Hash;
 
-pub trait RenderableMetadata: Serialize + Render {
+pub trait RenderableMetadata: Serialize + Render + Hash {
     fn render_image_meta(&self) -> Option<Markup>;
 
     fn section(&self) -> Sections;
+
+    fn title(&self) -> &str;
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Hash, Serialize)]
 pub struct GenericMeta {
     pub path: &'static str,
     pub section: Sections,
@@ -33,5 +36,9 @@ impl RenderableMetadata for GenericMeta {
 
     fn section(&self) -> Sections {
         self.section
+    }
+
+    fn title(&self) -> &str {
+        todo!()
     }
 }

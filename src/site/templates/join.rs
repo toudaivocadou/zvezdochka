@@ -1,23 +1,17 @@
-use crate::{
-    SiteData,
-    metadata::Metadata,
-    templates::{base::base, partials::navbar::Sections},
-};
-use hauchiwa::{Context, RuntimeError};
 use maud::{Markup, html};
 
-pub fn join_vocadou(sack: &Context<SiteData>) -> Result<Markup, RuntimeError> {
-    let meta = Metadata {
-        page_title: "入会希望者へ - Joining Vocaloid Producer Club".to_string(),
-        page_image: Some("images/circle-photo.jpg".to_string()),
-        canonical_link: "/join.html".to_string(),
-        section: Sections::Join,
-        author: None,
-        date: None,
-        description: None,
-    };
+pub fn join_vocadou() -> Markup {
+    // let meta = Metadata {
+    //     page_title: "入会希望者へ - Joining Vocaloid Producer Club".to_string(),
+    //     page_image: Some("circle-photo.jpg".to_string()),
+    //     canonical_link: "/join.html".to_string(),
+    //     section: Sections::Join,
+    //     author: None,
+    //     date: None,
+    //     description: None,
+    // };
 
-    let content = html! {
+    html! {
         section #hero {
             .container {
                 h2 { "ボカロP同好会、入会しよう。" }
@@ -57,6 +51,5 @@ pub fn join_vocadou(sack: &Context<SiteData>) -> Result<Markup, RuntimeError> {
                 }
             }
         }
-    };
-    base(sack, &meta, Some(&["scroll.js"]), content)
+    }
 }

@@ -7,12 +7,16 @@ use crate::site::{
     member::MemberMeta,
     news::NewsMeta,
     sitemap::SiteMap,
-    templates::{functions::sns::sns_icon, works::work_reference},
-    util::hash,
+    templates::{
+        functions::sns::sns_icon,
+        news::news_reference,
+        works::{album_reference, work_reference},
+    },
+    util::{hash, image_or_gray, reference},
     work::WorkMeta,
 };
 
-pub fn members(site_map: &SiteMap) -> Result<PreEscaped<String>, Report> {
+pub fn members(site_map: &SiteMap) -> Result<Markup, Report> {
     Ok(html! {
         section #members-hero {
             .container {
@@ -40,7 +44,7 @@ pub fn member_card(member: &MemberMeta) -> Result<Markup, Report> {
             a .member-link href=(format!("/members/{}.html", member.ascii_name)) {
                 .member-card {
                     .member-image .img-placeholder {
-                        img .member-image .img-placeholder src=(format!("images/icon/{}.jpg", member.ascii_name)) alt=(member.name);
+                        img .member-image .img-placeholder src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
                     }
                     .member-info #(member.ascii_name) {
                         h3 { (member.name) }
@@ -99,7 +103,7 @@ pub fn member_detail(
             .member-detail-container {
                 .member-profile {
                     .member-profile-image {
-                        img .img-placeholder src=(format!("images/icon/{}.jpg", member.name)) alt=(member.name);
+                        img .img-placeholder src=(format!("icon/{}.jpg", member.name)) alt=(member.name);
                     }
                     .member-profile-info {
                         h2 { (member.name) }
@@ -123,7 +127,7 @@ pub fn member_detail(
                     h3 { "代表作品" }
                     .container {
                         @for featured in &recent_works {
-                            (featured_work_item_detail(sack, featured)?)
+                            (featured_work_item_detail(featured))
                         }
                         @if recent_works.is_empty() {
                             p .work-description style="text-align: center;" {
@@ -177,14 +181,14 @@ pub fn member_detail(
     };
 }
 
-pub fn featured_work_item_detail(item: &WorkMeta) -> Result<Markup, Report> {
-    let work_ref = work_reference(&item.title, hash(item));
+pub fn featured_work_item_detail(item: &WorkMeta) -> Markup {
+    let work_ref = reference(item);
 
-    Ok(html! {
+    html! {
         .work-item-detail id=(work_ref) {
             h4 { (item.title) }
             .work-youtube-container {
-                img .work-item-thumb src=(thumbnail_link(item)?) alt=(item.title) {}
+                img .work-item-thumb src=(image_or_gray(item.thumbnail.as_ref())) alt=(item.title) {}
             }
 
             .work-description {
@@ -197,30 +201,30 @@ pub fn featured_work_item_detail(item: &WorkMeta) -> Result<Markup, Report> {
                 }
             }
         }
-    })
+    }
 }
 
-pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, RuntimeError> {
+pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, Report> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .post-img src=(post_thumbnail(item)?) {}
+                img .post-img src=(image_or_gray(item.thumbnail.as_ref())) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/news/{}.html", post_reference(item))) {
+                    a href=(format!("/news/{}.html", news_reference(&item.title, hash(&item)))) {
                         (item.title)
                     }
                 }
                 p .member-role {
                     (item.date)
                 }
-                p {
-                    (item.short)
+                @if let Some(short) = item.short {
+                    (short)
                 }
                 .member-links {
                     @for link in &item.sns_links {
-                        (sns_icon(sack, link.as_str())?)
+                        (sns_icon(link)?)
                     }
                 }
             }
@@ -228,15 +232,11 @@ pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, RuntimeError> {
     })
 }
 
-pub fn featured_album_detail(
-    sack: &Context<SiteData>,
-    album_meta: &AlbumMeta,
-    namemap: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
+pub fn featured_album_detail(album_meta: &AlbumMeta, sitemap: &SiteMap) -> Result<Markup, Report> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .work-item-thumb src=(image(sack, format!("images/{}", &album_meta.front_cover))?) alt=(&album_meta.title) {}
+                img .work-item-thumb src=(image_or_gray(album_meta.thumbnail.as_ref())) alt=(&album_meta.title) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
@@ -245,7 +245,7 @@ pub fn featured_album_detail(
                     }
                 }
                 p .work-role {
-                    (album_meta.release_date)
+                    (album_meta.date)
                 }
                 p .member-role {
                     (album_meta.contributors_str(namemap))

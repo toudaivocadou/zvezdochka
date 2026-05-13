@@ -157,15 +157,9 @@ pub fn news_detail(
 
 pub fn news_thumbnail(sack: &Context<SiteData>, item: &NewsMeta) -> Result<String, RuntimeError> {
     match &item.header_image {
-        Some(header) => Ok(image(sack, format!("images/{}", header))?),
-        None => Ok(image(sack, "images/gray.jpg")?),
+        Some(header) => Ok(image(sack, format!("{}", header))?),
+        None => Ok(image(sack, "gray.jpg")?),
     }
 
     // TODO: Get thumbnail from SNS post.
-}
-
-pub fn news_reference(title: &str, hash: u64) -> NewsRef {
-    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash.to_le_bytes());
-
-    NewsRef(format!("{title}-{cachebust}"))
 }

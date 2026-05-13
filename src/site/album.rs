@@ -1,19 +1,13 @@
-use hauchiwa::{
-    Tracker,
-    loader::{Image, image::ImageFormat},
+use std::fmt::Display;
+
+use crate::site::{
+    metadata::RenderableMetadata, sitemap::MemberRef, templates::partials::navbar::Sections,
+    util::format_date,
 };
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use time::{Date, Duration};
+use time::Date;
 use url::Url;
-
-use crate::site::{
-    metadata::RenderableMetadata,
-    sitemap::MemberRef,
-    templates::partials::navbar::Sections,
-    util::{format_date, make_path_relative},
-};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AlbumType {
@@ -24,11 +18,14 @@ pub enum AlbumType {
 
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Illustration {
+    pub title: String,
     pub image: String,
     #[serde(default)]
     pub illustrators: Vec<MemberRef>,
     #[serde(default)]
     pub additional_illustrators: Vec<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -38,11 +35,9 @@ pub struct AlbumMeta {
     pub authors: Vec<String>,
     #[serde(default)]
     pub additional_authors: Vec<String>,
-    #[serde(default)]
-    pub extra_authors: Vec<String>,
     pub date: Date,
 
-    pub link: Url,
+    pub link: Option<Url>,
     #[serde(default)]
     pub demonstration: Option<Url>,
     #[serde(default)]
@@ -51,8 +46,7 @@ pub struct AlbumMeta {
     #[serde(default)]
     pub short: Option<String>,
 
-    #[serde(default)]
-    pub thumbnail: Option<String>,
+    pub thumbnail: Illustration,
 
     #[serde(default)]
     pub illustrations: Vec<Illustration>,
@@ -63,15 +57,17 @@ pub struct AlbumMeta {
 
 impl RenderableMetadata for &AlbumMeta {
     fn render_image_meta(&self) -> Option<Markup> {
-        self.thumbnail.as_ref().map(|th| {
-            html! {
-                meta property="og:image" content=(th);
-            }
+        Some(html! {
+            meta property="og:image" content=(self.thumbnail.image);
         })
     }
 
     fn section(&self) -> Sections {
         Sections::AlbumPost
+    }
+
+    fn title(&self) -> &str {
+        &self.title
     }
 }
 
@@ -95,6 +91,18 @@ impl Render for &AlbumMeta {
     }
 }
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SongLength {
+    pub minutes: u8,
+    pub seconds: u8,
+}
+
+impl Display for SongLength {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.minutes, self.seconds)
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Track {
     pub title: String,
@@ -103,117 +111,7 @@ pub struct Track {
     #[serde(default)]
     pub additional_authors: Vec<String>,
     #[serde(default)]
-    pub duration: Option<Duration>,
+    pub duration: Option<SongLength>,
     #[serde(default)]
     pub external: bool,
 }
-
-// #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// pub struct AlbumMeta {
-//     pub title: String,
-//     #[serde(default)]
-//     pub subtitle: Option<String>,
-//     pub release_date: Date,
-//     pub short: String,
-//     pub album_type: AlbumType,
-//     #[serde(default)]
-//     pub contributors: Vec<String>,
-//     #[serde(default)]
-//     pub extra_contributors: Vec<String>,
-
-//     #[serde(default)]
-//     pub crossfade_demonstration: Option<String>,
-
-//     pub front_cover: String,
-//     pub front_cover_illustrator: String,
-//     #[serde(default)]
-//     pub front_cover_illustrator_not_on_site: bool,
-//     #[serde(default)]
-//     pub other_covers: HashMap<String, Illustration>,
-
-//     #[serde(default)]
-//     pub playlist_link: Option<String>,
-
-//     #[serde(default)]
-//     pub tracklist: Vec<TracklistTrack>,
-
-//     #[serde(default)]
-//     pub sns_links: Vec<String>,
-// }
-
-// #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// pub struct Illustration {
-//     pub link: String,
-//     pub illustrator: String,
-//     #[serde(default)]
-//     pub illustrator_is_not_on_site: bool,
-// }
-
-// #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-// pub struct TracklistTrack {
-//     pub author: String,
-//     pub title: String,
-//     #[serde(default)]
-//     pub duration_seconds: Option<i32>,
-//     #[serde(default)]
-//     pub link: Option<String>,
-//     #[serde(default)]
-//     pub on_site: bool,
-//     #[serde(default)]
-//     pub external_author: bool,
-// }
-
-// impl AlbumMeta {
-//     pub fn contributors_str(&self, name_map: &HashMap<String, String>) -> String {
-//         let mut all_contributors = HashSet::new();
-//         all_contributors.extend(
-//             self.contributors
-//                 .iter()
-//                 .map(|name| match name_map.get(name) {
-//                     Some(n) => n,
-//                     None => panic!("{name}: not found"),
-//                 }),
-//         );
-//         all_contributors.extend(&self.extra_contributors);
-
-//         all_contributors
-//             .into_iter()
-//             .map(String::as_str)
-//             .collect::<Vec<&str>>()
-//             .join(", ")
-//     }
-
-//     pub fn contributors_str_naive(&self) -> String {
-//         let mut all_contributors = HashSet::new();
-//         all_contributors.extend(&self.contributors);
-//         all_contributors.extend(&self.extra_contributors);
-
-//         all_contributors
-//             .into_iter()
-//             .map(String::as_str)
-//             .collect::<Vec<&str>>()
-//             .join(", ")
-//     }
-// }
-
-// impl From<AlbumMeta> for Metadata {
-//     fn from(value: AlbumMeta) -> Self {
-//         let authors = value.contributors_str_naive();
-//         Metadata {
-//             canonical_link: format!("/works/albums/{}", &value.title),
-//             page_title: value.title,
-//             page_image: Some(value.front_cover),
-//             section: Sections::Works,
-//             description: Some(value.short),
-//             author: Some(authors),
-//             date: Some(value.release_date.to_string()),
-//         }
-//     }
-// }
-
-// #[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-// pub enum AlbumType {
-//     Solo,
-//     GroupExternal,
-//     ToudaiVocadou,
-// }

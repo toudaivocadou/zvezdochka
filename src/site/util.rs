@@ -1,16 +1,17 @@
+use crate::site::metadata::RenderableMetadata;
+use crate::site::sitemap::SiteMap;
+use base64::Engine;
+use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use eyre::Report;
+use maud::{Markup, PreEscaped, html};
 use minijinja::Environment;
 use pulldown_cmark::html::push_html;
 use pulldown_cmark::{Event, Options, Parser};
-use std::hash::Hasher;
-
-use maud::{Markup, Render};
 use seahash::SeaHasher;
+use std::hash::Hasher;
 use time::Date;
 use time::macros::format_description;
 use url::Url;
-
-use crate::site::metadata::RenderableMetadata;
 
 pub fn shorten(content: &str) -> String {
     content.chars().take(150).collect::<String>()
@@ -38,87 +39,6 @@ pub fn render_markdown(
     Ok(output_str_buf)
 }
 
-// pub fn image(sack: &Context<SiteData>, path: impl AsRef<str>) -> Result<String, RuntimeError> {
-//     let path = path.as_ref();
-
-//     let picture_path = Utf8PathBuf::from(path);
-//     let image = sack.get::<Image>(&picture_path)?;
-//     Ok(image.path.to_string())
-// }
-
-// pub struct AudioFile {}
-
-// #[allow(dead_code)]
-// pub fn audio(sack: &Context<SiteData>, path: impl AsRef<str>) -> Result<String, RuntimeError> {
-//     let path = path.as_ref();
-
-//     let audio_path = Utf8PathBuf::from(path);
-//     let audio = sack.glob_one_with_file::<AudioFile>(audio_path.as_str())?;
-//     Ok(audio.file.file.to_string())
-// }
-
-// pub fn markup_to_page(
-//     ctx: &Context<SiteData>,
-//     path: impl AsRef<str>,
-//     markup: Markup,
-// ) -> Result<Page, RuntimeError> {
-//     rewrite_page(ctx, Page::html(path.as_ref(), &markup.0))
-// }
-
-// static SITE_URL: OnceLock<String> = OnceLock::new();
-
-// pub fn set_site_url(value: String) {
-//     SITE_URL.set(value).expect("Failed to set SITE_URL!")
-// }
-
-// fn lnk(url: impl AsRef<str>) -> String {
-//     let root = SITE_URL.get().expect("SITE_URL not set!");
-
-//     slash_guard(root, url.as_ref())
-// }
-
-// pub fn site_url() -> String {
-//     SITE_URL.get().expect("SITE_URL not set!").to_string()
-// }
-
-// static EXTERNAL_BINARY_URL: OnceLock<String> = OnceLock::new();
-
-// pub fn set_external_bin_url(value: String) {
-//     EXTERNAL_BINARY_URL
-//         .set(value)
-//         .expect("Failed to set EXTERNAL_BINARY_URL!")
-// }
-
-// static SITE_ROOT: OnceLock<String> = OnceLock::new();
-
-// pub fn set_site_root(site_root: String) {
-//     SITE_ROOT.set(site_root).expect("SITE_ROOT not set!")
-// }
-
-// pub fn site_root() -> &'static str {
-//     SITE_ROOT.get().expect("SITE_ROOT not set!")
-// }
-
-// fn lnk_s3(url: impl AsRef<str>) -> String {
-//     let url = url.as_ref();
-
-//     if let Ok(u) = Url::parse(url) {
-//         warn!("Warning: Passed link to lnk that is already a url");
-//         return u.to_string();
-//     }
-
-//     let root = if url.starts_with("miku:") {
-//         EXTERNAL_BINARY_URL
-//             .get()
-//             .expect("EXTERNAL_BINARY_URL not set!")
-//             .to_string()
-//     } else {
-//         site_url()
-//     };
-
-//     slash_guard(&root, url)
-// // }
-
 fn slash_guard(root: &str, thing: &str) -> String {
     if root == "." {
         return if thing.starts_with("/") {
@@ -134,139 +54,6 @@ fn slash_guard(root: &str, thing: &str) -> String {
         format!("{root}/{}", thing)
     }
 }
-
-// #[allow(clippy::too_many_arguments)]
-// pub fn render_metadata_and_final_page<C, RenderFn>(
-//     context: &Context<SiteData>,
-//     environment: &Environment,
-//     sitemap: &SiteMap,
-//     name_map: &HashMap<String, String>,
-//     data: &Content<C>,
-//     page_type: Sections,
-//     friendly_name: &str,
-//     final_url: String,
-//     render_fn: RenderFn,
-// ) -> Result<Page, RuntimeError>
-// where
-//     C: Serialize + Send + Sync,
-//     RenderFn: FnOnce(
-//         &Context<SiteData>,
-//         &C,
-//         &SiteMap,
-//         &HashMap<String, String>,
-//         &String,
-//     ) -> Result<Markup, RuntimeError>,
-// {
-//     let meta = &data.meta;
-//     let content = &data.text;
-
-//     let work_rendered = render_markdown(context, environment, &meta, content)
-//         .map_err(|why| {
-//             let err = RuntimeError::msg(why.to_string());
-//             err.context(format!(
-//                 "{} page for {}: render markdown",
-//                 page_type, friendly_name
-//             ))
-//         })
-//         .and_then(|text| {
-//             render_fn(context, meta, sitemap, name_map, &text).map_err(|why| {
-//                 why.context(format!(
-//                     "{} page for {}: render final page",
-//                     page_type, friendly_name
-//                 ))
-//             })
-//         });
-
-//     if let Err(why) = &work_rendered {
-//         error!(
-//             "BUILD-{}: Error while building page {}: {}.",
-//             context.get_globals().data.build_id,
-//             final_url,
-//             why
-//         );
-//     }
-
-//     Ok(Page::html(final_url, work_rendered?.into_string()))
-// }
-
-// pub fn rewrite_settings(site_url: &str) -> Settings<'_, '_> {
-//     Settings {
-//         element_content_handlers: vec![
-//             // element!("script", |element| {
-//             //     element.set_attribute("async", "")?;
-//             //     element.set_attribute("defer", "")?;
-//             //     Ok(())
-//             // }),
-//             // element!("img", |element| {
-//             //     element.set_attribute("loading", "lazy")?;
-
-//             //     Ok(())
-//             // }),
-//             // element!("iframe", |element| {
-//             //     element.set_attribute("loading", "lazy")?;
-
-//             //     Ok(())
-//             // }),
-//             element!("[href]", |element| {
-//                 let referring_to = match element.get_attribute("href") {
-//                     Some(r) => r,
-//                     None => {
-//                         return Ok(());
-//                     }
-//                 };
-
-//                 let rewritten_lnk = rewrite_link(site_url, referring_to)?;
-//                 element.set_attribute("href", &rewritten_lnk)?;
-
-//                 Ok(())
-//             }),
-//             element!("[src]", |element| {
-//                 let referring_to = match element.get_attribute("src") {
-//                     Some(r) => r,
-//                     None => {
-//                         return Ok(());
-//                     }
-//                 };
-
-//                 // check if this refer is relative
-//                 let rewritten_lnk = rewrite_link(site_url, referring_to)?;
-//                 element.set_attribute("src", &rewritten_lnk)?;
-
-//                 Ok(())
-//             }),
-//         ],
-//         ..Settings::default()
-//     }
-// }
-
-// pub fn rewrite_html(text: &str, settings: Settings<'_, '_>) -> Result<String, Report> {
-//     rewrite_str(text, settings).map_err(|why| Report::msg(why.to_string()))
-// }
-
-// pub fn rewrite_page(context: &Context<SiteData>, mut page: Page) -> Result<Page, Report> {
-//     let build_id = context.get_globals().data.build_id;
-//     let site_url = &context.get_globals().data.site_url;
-//     let pgpath = &page.path;
-
-//     if page.path.starts_with("/") {
-//         panic!("page path {} starts with illegal /", page.path);
-//     }
-//     if let Some(extension) = page.path.extension()
-//         && extension != "html"
-//     {
-//         info!(
-//             "BUILD-{}: Skipping page {}, not a html page.",
-//             build_id, pgpath
-//         );
-//         return Ok(page);
-//     }
-
-//     info!("BUILD-{}: Rewriting {}", build_id, pgpath);
-//     let out = rewrite_html(&page.text, rewrite_settings(site_url))?;
-//     page.text = out;
-
-//     Ok(page)
-// }
 
 pub fn rewrite_link(site_url: &str, link: String) -> Result<String, Report> {
     if link.starts_with("..") || link.starts_with("#") || link.starts_with("https://") {
@@ -314,8 +101,94 @@ pub fn hash<T: std::hash::Hash>(item: &T) -> u64 {
     seahasher.finish()
 }
 
-// pub fn pretty_format_names_lists<T>(name_list_a: &[T], name_list_b: &[T]) -> Markup
-// where
-//     T: Render,
-// {
+pub fn image_or_gray(image_path: Option<&String>) -> &str {
+    match image_path {
+        Some(p) => p.as_str(),
+        None => "gray.jpg",
+    }
+}
+
+// pub type ItemReference = String;
+
+// pub fn reference(item: impl RenderableMetadata) -> ItemReference {
+//     let hash_self = hash(&item);
+//     let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hash_self.to_le_bytes());
+
+//     format!("{}-{}", item.title(), cachebust)
 // }
+
+pub fn reference<S>(title: &str, known_authors: &[S], unknown_authors: &[S]) -> String
+where
+    S: AsRef<str>,
+{
+    let mut hasher = SeaHasher::default();
+    hasher.write(title.as_bytes());
+    known_authors
+        .iter()
+        .chain(unknown_authors)
+        .for_each(|item| {
+            let item = item.as_ref();
+            hasher.write(item.as_bytes());
+        });
+    let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_le_bytes());
+    format!("{title}-{cachebust}")
+}
+
+pub fn known_invalid_link<S>(inner: &S) -> Markup
+where
+    S: AsRef<str>,
+{
+    html! {
+        a .invalid-link href = "." {
+            (inner.as_ref())
+        };
+    }
+}
+
+pub fn author_list<S>(sitemap: &SiteMap, known_authors: &[S], unknown_authors: &[S]) -> Markup
+where
+    S: AsRef<str>,
+{
+    if known_authors.is_empty() && unknown_authors.is_empty() {
+        return html! {};
+    }
+
+    let unknown_authors_rendered = unknown_authors.iter().map(|unknown| {
+        html! {
+            (known_invalid_link(unknown))
+        }
+    });
+
+    let known_authors_rendered = known_authors.iter().map(|author| {
+        let author = author.as_ref(); // type system magic :D
+        // PANIC: This cannot panic because by the time we are here we already checked every meta.
+        let member_meta = sitemap.members.get(author).unwrap();
+        html! {
+            a .member-role .member-bio href = (format!("/members/{}.html", member_meta.name)) {
+                (author)
+            };
+        }
+    });
+
+    let mut total_length = known_authors.len() + unknown_authors.len();
+
+    let mut authors_string = String::with_capacity(total_length * 5 + total_length + 2);
+
+    for author_html in known_authors_rendered {
+        authors_string.push_str(&author_html.into_string());
+        if total_length != 1 {
+            authors_string.push_str(", ");
+        }
+        total_length -= 1;
+    }
+
+    for author_html in unknown_authors_rendered {
+        authors_string.push_str(&author_html.into_string());
+        if total_length != 1 {
+            authors_string.push_str(", ");
+        }
+        total_length -= 1;
+    }
+
+    PreEscaped(authors_string)
+}

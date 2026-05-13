@@ -3,7 +3,7 @@ use std::fmt::Display;
 use maud::{Markup, html};
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Sections {
     Home,
     Members,

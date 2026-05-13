@@ -42,7 +42,7 @@ mod die_linky;
 mod member;
 mod metadata;
 mod news;
-mod optimize;
+mod fixup;
 mod sitemap;
 pub mod templates;
 mod util;
@@ -242,7 +242,7 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
                 for author in &work.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: 作品 {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", work.title, author)
+                        error!("Sitemap: 作品 `{}` で投稿者 `{}` を見つけませんでした。サイトで登録していない投稿者は `additional_authors` 欄に入力してください。", work.title, author)
                     }
                 }
             }
@@ -251,19 +251,26 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
                 for author in &album.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: アルバム {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, author)
+                        error!("Sitemap: アルバム `{}` で投稿者 `{}` を見つけませんでした。サイトで登録していない投稿者は `additional_authors` 欄に入力してください。", album.title, author)
                     }
                 }
 
                 for song in &album.tracks {
+                    if let Some(duration) = song.duration {
+                        if duration.seconds >= 60 {
+                            should_error = true;
+                            error!("Sitemap: `{}` の `{}` 曲: 秒量が60以上です。秒量の最大の値は59です。", album.title, song.title)
+                        }
+                    }
+
                     if song.external {
                         continue;
                     }
-                    
+
                     for song_author in &song.authors {
                         if !members.contains_key(song_author) {
                             should_error = true;
-                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, song.title, song_author)
+                            error!("Sitemap: アルバム `{}` の曲 `{}` 投稿者{}を見つけませんでした。サイトで登録していない投稿者は `additional_authors` 欄に入力してください。", album.title, song.title, song_author)
                         }
                     }
 
@@ -271,7 +278,7 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
                         for illustrator in &illust.illustrators {
                             if !members.contains_key(illustrator) {
                                 should_error = true;
-                                error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, illust.image, illustrator)
+                                error!("Sitemap: アルバム `{}` のイラスト `{}` 投稿者 `{}` を見つけませんでした。サイトで登録していない投稿者は `additional_authors` 欄に入力してください。", album.title, illust.image, illustrator)
                             }
                         }
                     }
@@ -282,33 +289,10 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
                 if let Some(author) = &post.author {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: ニュース {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", post.title, author)
+                        error!("Sitemap: ニュース `{}` で投稿者 `{}` を見つけませんでした。サイトで登録していない投稿者は `additional_authors` 欄に入力してください。", post.title, author)
                     }
                 }
             }
-
-            // ensure member works are valid
-            // for member in members.values() {
-            //     for featured_work in &member.featured_works {
-            //         match featured_work {
-            //             WorkTitleOrSource::Source(url) => {
-            //                 let found = works.iter().find(|meta| &meta.source == url).is_some();
-            //                 if !found {
-            //                     should_error = true;
-            //                     error!("Sitemap: Member: Featured Work: {}のメンバーページで注目作品(URL {})を見つけませんでした。", member.ascii_name, url);
-            //                 }
-            //             },
-            //             WorkTitleOrSource::Title(title) => {
-            //                 let found = works.iter().find(|meta| &meta.title == title).is_some();
-            //                 if !found {
-            //                     should_error = true;
-            //                     error!("Sitemap: Member: Featured Work: {}のメンバーページで注目作品(作名 {})を見つけませんでした。", member.ascii_name, title);
-            //                 }
-            //             },
-            //         }
-            //     }
-            // }
-
 
             let site_map = SiteMap {
                 members,
@@ -322,11 +306,10 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 
     // build work pages
 
-    let works = config.task().each(works).using((environment, sitemap, images)).map(|site_data, work, (environment, sitemap)| {
+    let works = config.task().each(works).using((environment, sitemap, images, scripts, styles)).map(|site_data, work, (environment, sitemap, images, scripts, styles)| {
         let context = work.meta.path
         let rendered_markdown = render_markdown(&site_data.env.data, &environment, &work.matter, &work.text);
 
-        
 
         Ok(())
     })
@@ -359,7 +342,8 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 //             ),
 //             // load CSS
 //             loader::glob_styles(site_root(), "styles/*.css"),
-//             // load JS
+//             // load JSuse crate::site::util::{image, shorten};
+
 //             loader::glob_scripts(site_root(), "js/*.js"),
 //             // load images
 //             loader::glob_images(site_root(), "images/**/*.jpg"),
@@ -492,7 +476,7 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 //                 albums: albums.iter().map(|album| &album.data.meta).cloned().collect(),
 //             };
 //             sitemap.sort_self();
-//             // TODO: add "worked on albums" and "posts". 
+//             // TODO: add "worked on albums" and "posts".
 
 //             info!(
 //                 "BUILD-{}: Construct: minijinja Environment.",
