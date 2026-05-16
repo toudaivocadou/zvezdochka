@@ -307,8 +307,9 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
     // build work pages
 
     let works = config.task().each(works).using((environment, sitemap, images, scripts, styles)).map(|site_data, work, (environment, sitemap, images, scripts, styles)| {
-        let context = work.meta.path
-        let rendered_markdown = render_markdown(&site_data.env.data, &environment, &work.matter, &work.text);
+        let context = work.meta.path.as_str();
+        let
+        let rendered_markdown = render_markdown(context, &environment, &work.matter, &work.text);
 
 
         Ok(())

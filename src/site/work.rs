@@ -29,7 +29,7 @@ pub struct WorkMeta {
     pub sns_links: Vec<Url>,
 }
 
-impl RenderableMetadata for &WorkMeta {
+impl RenderableMetadata for WorkMeta {
     fn render_image_meta(&self) -> Option<maud::Markup> {
         Some(html! {
             meta property="og:image" content="thumbnail.jpg";
@@ -45,7 +45,7 @@ impl RenderableMetadata for &WorkMeta {
     }
 }
 
-impl Render for &WorkMeta {
+impl Render for WorkMeta {
     fn render(&self) -> maud::Markup {
         let og_type = Sections::WorksPost.opengraph_type();
 

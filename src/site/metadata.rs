@@ -39,6 +39,40 @@ impl RenderableMetadata for GenericMeta {
     }
 
     fn title(&self) -> &str {
-        todo!()
+        self.title
+    }
+}
+
+impl<T> RenderableMetadata for Box<T>
+where
+    T: RenderableMetadata,
+{
+    fn render_image_meta(&self) -> Option<Markup> {
+        self.as_ref().render_image_meta()
+    }
+
+    fn section(&self) -> Sections {
+        self.as_ref().section()
+    }
+
+    fn title(&self) -> &str {
+        self.as_ref().title()
+    }
+}
+
+impl<T> RenderableMetadata for &T
+where
+    T: RenderableMetadata,
+{
+    fn render_image_meta(&self) -> Option<Markup> {
+        T::render_image_meta(&self)
+    }
+
+    fn section(&self) -> Sections {
+        T::section(&self)
+    }
+
+    fn title(&self) -> &str {
+        T::title(&self)
     }
 }

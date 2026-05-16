@@ -55,7 +55,7 @@ pub struct AlbumMeta {
     pub tracks: Vec<Track>,
 }
 
-impl RenderableMetadata for &AlbumMeta {
+impl RenderableMetadata for AlbumMeta {
     fn render_image_meta(&self) -> Option<Markup> {
         Some(html! {
             meta property="og:image" content=(self.thumbnail.image);
@@ -71,7 +71,7 @@ impl RenderableMetadata for &AlbumMeta {
     }
 }
 
-impl Render for &AlbumMeta {
+impl Render for AlbumMeta {
     fn render(&self) -> maud::Markup {
         let og_type = Sections::AlbumPost.opengraph_type();
 

@@ -31,7 +31,7 @@ pub struct MemberMeta {
                          // pub featured_works: Vec<WorkTitleOrSource>,
 }
 
-impl RenderableMetadata for &MemberMeta {
+impl RenderableMetadata for MemberMeta {
     fn render_image_meta(&self) -> Option<Markup> {
         Some(html! {
             meta property="og:image" content=(format!("icon/{}.jpg", &self.ascii_name));
@@ -47,7 +47,7 @@ impl RenderableMetadata for &MemberMeta {
     }
 }
 
-impl Render for &MemberMeta {
+impl Render for MemberMeta {
     fn render(&self) -> maud::Markup {
         let og_type = Sections::MemberProfile.opengraph_type();
 

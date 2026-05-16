@@ -21,7 +21,7 @@ pub struct NewsMeta {
     pub sns_links: Vec<Url>,
 }
 
-impl RenderableMetadata for &NewsMeta {
+impl RenderableMetadata for NewsMeta {
     fn render_image_meta(&self) -> Option<Markup> {
         self.thumbnail.as_ref().map(|th| {
             html! {
@@ -39,7 +39,7 @@ impl RenderableMetadata for &NewsMeta {
     }
 }
 
-impl Render for &NewsMeta {
+impl Render for NewsMeta {
     fn render(&self) -> maud::Markup {
         let og_type = Sections::NewsPost.opengraph_type();
 
