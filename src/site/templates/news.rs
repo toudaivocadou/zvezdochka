@@ -1,92 +1,81 @@
-use crate::news::NewsMeta;
-use crate::site::sitemap::NewsRef;
-use crate::sitemap::SiteMap;
-use crate::templates::base::base;
-use crate::templates::functions::sns::sns_icon;
-use crate::templates::partials::navbar::Sections;
-use crate::util::{image, shorten};
-use crate::{SiteData, metadata::Metadata};
-use base64::Engine;
-use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use crate::site::sitemap::SiteMap;
+use crate::site::templates::functions::sns::sns_icon;
+use crate::site::util::image_or_gray;
+use crate::site::{news::NewsMeta, util::reference};
+use eyre::Report;
 use maud::{Markup, PreEscaped, html};
-use std::collections::HashMap;
 
-pub fn news_posts(
-    sack: &Context<SiteData>,
-    site_map: &SiteMap,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
+pub const NEWS_MISSING_AUTHOR: &'static str = "東大ボカロP同好会";
+
+pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Report> {
     // TODO: pagination. this will get long! yell at peng if we get >100!
 
-    let inner = html! {
+    Ok(html! {
         section #hero {
             .container {
                 h2 { "ニュース" }
-                p { "東京大学ボカロP同好会のニュース目録です。" }
+                p { "東京大学ボカロP同好会のニュース目録" }
             }
         }
 
         section #list {
             .listcontainer .flex-container style="align-items: center;"{
-                @for post_meta in &site_map.news {
-                    (news_card(sack, post_meta, name_map)?)
+                @for news_posts in &site_map.news {
+                    (news_card(site_map, news_posts)?)
                 }
                 @if site_map.news.is_empty() {
                     p .work-description style="text-align: center;" {
-                        em {
+                        i {
                             "ニュースがありません。"
                         }
                     }
                 }
             }
         }
-    };
+    })
 
-    let metadata = Metadata {
-        page_title: "ニュース".to_string(),
-        page_image: None,
-        canonical_link: "/news.html".to_string(),
-        section: Sections::News,
-        description: Some("東京大学ボカロP同好会のニュース".to_string()),
-        author: None,
-        date: None,
-    };
+    // let metadata = Metadata {
+    //     page_title: "ニュース".to_string(),
+    //     page_image: None,
+    //     canonical_link: "/news.html".to_string(),
+    //     section: Sections::News,
+    //     description: Some("東京大学ボカロP同好会のニュース".to_string()),
+    //     author: None,
+    //     date: None,
+    // };
 
-    base(sack, &metadata, Some(&[]), inner)
+    // base(sack, &metadata, Some(&[]), inner)
 }
 
-pub fn news_card(
-    context: &Context<SiteData>,
-    post_meta: &NewsMeta,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
-    let author_name = post_meta.author.as_ref().map(|author| name_map.get(author).ok_or(RuntimeError::msg("Could not find author. Does the member page exist? Did you remember to type in the ascii name? Did you mistype it? Yell at peg for more info".to_string())));
-
+pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Report> {
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
-                img .post-img src=(news_thumbnail(context, post_meta)?) {}
+                img .post-img src=(image_or_gray(news_meta.thumbnail.as_ref())) {}
             }
             .post-info {
                 h3 .post-card-title {
-                    a href=(format!("/news/{}.html", news_reference(post_meta))) {
-                        (post_meta.title)
+                    a href=(format!("/news/{}.html", reference(&news_meta.title, &[news_meta.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                        (news_meta.title)
                     }
                 }
                 p .member-role {
-                    (post_meta.date)
+                    (news_meta.date)
                 }
-                @if let Some(author) = author_name && let Some(ascii_author) = &post_meta.author {
-                    a href=(format!("/members/{}.html", ascii_author)) { p { (author?) } }
+                @if let Some(ascii_author) = &news_meta.author {
+                    a href=(format!("/members/{}.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
                 } @else {
                     p { "東大ボカロP同好会" }
                 }
                 p {
-                    (post_meta.short)
+                    @if let Some(short) = news_meta.short.as_ref() {
+                        (short)
+                    }
                 }
+
                 .member-links {
-                    @for link in &post_meta.sns_links {
-                        (sns_icon(context, link.as_str())?)
+                    @for link in &news_meta.sns_links {
+                        (sns_icon(link)?)
                     }
                 }
             }
@@ -95,31 +84,28 @@ pub fn news_card(
 }
 
 pub fn news_detail(
-    sack: &Context<SiteData>,
-    post_meta: &NewsMeta,
+    site_map: &SiteMap,
+    news_meta: &NewsMeta,
     content: &str,
-    name_map: &HashMap<String, String>,
-) -> Result<Markup, RuntimeError> {
-    let author_name = post_meta.author.as_ref().map(|author| name_map.get(author).ok_or(RuntimeError::msg("Could not find author. Does the member page exist? Did you remember to type in the ascii name? Did you mistype it? Yell at peg for more info".to_string())));
-
-    let inner = html! {
+) -> Result<Markup, Report> {
+    Ok(html! {
         section #post-detail {
             .member-detail-container {
                 .member-profile {
                     .work-image {
-                        img src=(news_thumbnail(sack, post_meta)?) alt="header image" { }
+                        img src=(image_or_gray(news_meta.thumbnail.as_ref())) alt="header image" { }
                     }
                     .member-profile-info {
-                        h2 { (post_meta.title) }
-                        p { (post_meta.date) }
-                        @if let Some(author) = author_name && let Some(ascii_author) = &post_meta.author {
-                            a href=(format!("/members/{}.html", ascii_author)) { p { (author?) } }
+                        h2 { (news_meta.title) }
+                        p { (news_meta.date) }
+                        @if let Some(ascii_author) = &news_meta.author {
+                            a href=(format!("/members/{}.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
                         } @else {
                             p { "東大ボカロP同好会" }
                         }
                         .member-links {
-                            @for link in &post_meta.sns_links {
-                                (sns_icon(sack, link.as_str())?)
+                            @for link in &news_meta.sns_links {
+                                (sns_icon(link)?)
                             }
                         }
                     }
@@ -140,26 +126,17 @@ pub fn news_detail(
                 }
             }
         }
-    };
+    })
 
-    let metadata = Metadata {
-        page_title: post_meta.title.clone(),
-        page_image: Some(news_thumbnail(sack, post_meta)?),
-        canonical_link: format!("/news/{}.html", news_reference(post_meta)),
-        section: Sections::NewsPost,
-        description: Some(shorten(content)),
-        author: post_meta.author.clone(),
-        date: Some(post_meta.date.to_string()),
-    };
+    // let metadata = Metadata {
+    //     page_title: post_meta.title.clone(),
+    //     page_image: Some(news_thumbnail(sack, post_meta)?),
+    //     canonical_link: format!("/news/{}.html", news_reference(post_meta)),
+    //     section: Sections::NewsPost,
+    //     description: Some(shorten(content)),
+    //     author: post_meta.author.clone(),
+    //     date: Some(post_meta.date.to_string()),
+    // };
 
-    base(sack, &metadata, Some(&[]), inner)
-}
-
-pub fn news_thumbnail(sack: &Context<SiteData>, item: &NewsMeta) -> Result<String, RuntimeError> {
-    match &item.header_image {
-        Some(header) => Ok(image(sack, format!("{}", header))?),
-        None => Ok(image(sack, "gray.jpg")?),
-    }
-
-    // TODO: Get thumbnail from SNS post.
+    // base(sack, &metadata, Some(&[]), inner)
 }

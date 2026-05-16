@@ -2,7 +2,6 @@ use eyre::Report;
 use maud::{Render, html};
 use minijinja::{Error as JinjaError, ErrorKind};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use url::Url;
 
 use crate::site::die_linky::SocialLinkType;

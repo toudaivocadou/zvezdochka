@@ -1,18 +1,13 @@
 use eyre::Report;
 use maud::{Markup, PreEscaped, html};
-use std::collections::HashMap;
 
 use crate::site::{
     album::AlbumMeta,
     member::MemberMeta,
     news::NewsMeta,
     sitemap::SiteMap,
-    templates::{
-        functions::sns::sns_icon,
-        news::news_reference,
-        works::{album_reference, work_reference},
-    },
-    util::{hash, image_or_gray, reference},
+    templates::{functions::sns::sns_icon, news::NEWS_MISSING_AUTHOR},
+    util::{author_list, image_or_gray, reference},
     work::WorkMeta,
 };
 
@@ -84,7 +79,7 @@ pub fn member_detail(
         .take(5)
         .collect::<Vec<&WorkMeta>>();
 
-    let recent_posts = site_map
+    let recent_news = site_map
         .news
         .iter()
         .filter(|post| post.author.as_ref() == Some(&member.ascii_name))
@@ -98,7 +93,7 @@ pub fn member_detail(
         .take(5)
         .collect::<Vec<&AlbumMeta>>();
 
-    let inner = html! {
+    Ok(html! {
         section #member-detail {
             .member-detail-container {
                 .member-profile {
@@ -124,10 +119,10 @@ pub fn member_detail(
 
             .member-works-container {
                 .member-featured-works {
-                    h3 { "代表作品" }
+                    h3 { "最近投稿作品" }
                     .container {
                         @for featured in &recent_works {
-                            (featured_work_item_detail(featured))
+                            (featured_work_detail(featured))
                         }
                         @if recent_works.is_empty() {
                             p .work-description style="text-align: center;" {
@@ -140,12 +135,12 @@ pub fn member_detail(
                 }
 
                 .member-featured-works {
-                    h3 { "最近のポスト" }
+                    h3 { "最近投稿ニュース" }
                     .container {
-                        @for featured in featured_posts.iter() {
-                            (featured_post_detail(sack, featured)?)
+                        @for news in recent_news.iter() {
+                            (featured_post_detail(news)?)
                         }
-                        @if featured_posts.is_empty() {
+                        @if recent_news.is_empty() {
                             p .work-description style="text-align: center;" {
                                 em {
                                     "ポストがありません。"
@@ -156,12 +151,12 @@ pub fn member_detail(
                 }
 
                 .member-featured-works {
-                    h3 { "最近のアルバム" }
+                    h3 { "最近投稿アルバム" }
                     .container {
-                        @for featured in featured_albums.iter() {
-                            (featured_album_detail(sack, featured, namemap)?)
+                        @for featured in recent_albums.iter() {
+                            (featured_album_detail(site_map, featured)?)
                         }
-                        @if featured_albums.is_empty() {
+                        @if recent_albums.is_empty() {
                             p .work-description style="text-align: center;" {
                                 em {
                                     "アルバムがありません。"
@@ -178,25 +173,29 @@ pub fn member_detail(
                 }
             }
         }
-    };
+    })
 }
 
-pub fn featured_work_item_detail(item: &WorkMeta) -> Markup {
-    let work_ref = reference(item);
-
+pub fn featured_work_detail(work: &WorkMeta) -> Markup {
     html! {
-        .work-item-detail id=(work_ref) {
-            h4 { (item.title) }
+        .work-item-detail id=(urlencoding::encode(&work.title)) {
+            h4 { (work.title) }
             .work-youtube-container {
-                img .work-item-thumb src=(image_or_gray(item.thumbnail.as_ref())) alt=(item.title) {}
+                img .work-item-thumb src=(image_or_gray(work.thumbnail.as_ref().map(|x| &x.image))) alt=(work.title) {}
             }
 
             .work-description {
-                p { (item.short.as_deref().unwrap_or_default()) }
+                p {
+                    @if let Some(short) = &work.short {
+                        (short)
+                    } @else {
+                        ("説明がありません。")
+                    }
+                }
             }
 
             .click-button{
-                a href=(format!("/works/releases/{}.html", work_ref)) {
+                a href=(format!("/works/releases/{}.html", reference(&work.title, &work.authors, &work.additional_authors))) {
                     p { "詳しく見る" }
                 }
             }
@@ -204,26 +203,31 @@ pub fn featured_work_item_detail(item: &WorkMeta) -> Markup {
     }
 }
 
-pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, Report> {
+pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Report> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .post-img src=(image_or_gray(item.thumbnail.as_ref())) {}
+                img .post-img src=(image_or_gray(news.thumbnail.as_ref())) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/news/{}.html", news_reference(&item.title, hash(&item)))) {
-                        (item.title)
+                    a href=(format!("/news/{}.html", reference(&news.title, &[news.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                        (news.title)
                     }
                 }
                 p .member-role {
-                    (item.date)
+                    (news.date)
                 }
-                @if let Some(short) = item.short {
-                    (short)
+                p {
+                    @if let Some(short) = &news.short {
+                        (short)
+                    } @else {
+                        ("説明がありません。")
+                    }
                 }
+
                 .member-links {
-                    @for link in &item.sns_links {
+                    @for link in &news.sns_links {
                         (sns_icon(link)?)
                     }
                 }
@@ -232,15 +236,15 @@ pub fn featured_post_detail(item: &NewsMeta) -> Result<Markup, Report> {
     })
 }
 
-pub fn featured_album_detail(album_meta: &AlbumMeta, sitemap: &SiteMap) -> Result<Markup, Report> {
+pub fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Report> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .work-item-thumb src=(image_or_gray(album_meta.thumbnail.as_ref())) alt=(&album_meta.title) {}
+                img .work-item-thumb src=(&album_meta.thumbnail.image) alt=(&album_meta.thumbnail.title) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/works/albums/{}.html", album_reference(&album_meta.title, &album_meta.front_cover))) {
+                    a href=(format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))) {
                         (album_meta.title)
                     }
                 }
@@ -248,7 +252,7 @@ pub fn featured_album_detail(album_meta: &AlbumMeta, sitemap: &SiteMap) -> Resul
                     (album_meta.date)
                 }
                 p .member-role {
-                    (album_meta.contributors_str(namemap))
+                    (author_list(sitemap, &album_meta.authors, &album_meta.additional_authors))
                 }
             }
         }
