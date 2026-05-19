@@ -5,6 +5,7 @@ use crate::site::read::{
     parse_front_matter_and_fetch_contents, parse_post_meta, parse_work_meta, robots_txt,
 };
 use crate::site::sitemap::{MemberRef, SiteMap};
+use crate::site::templates::base::base;
 use crate::site::templates::error::notfound;
 use crate::site::templates::functions::embed::{embed, jinja_embed};
 use crate::site::templates::functions::member::jinja_member;
@@ -24,7 +25,7 @@ use crate::site::work::{WorkMeta};
 use clap::{Parser, ValueEnum};
 use hauchiwa::error::HauchiwaError;
 use hauchiwa::tracing::{error, info, warn};
-use hauchiwa::{Blueprint};
+use hauchiwa::{Blueprint, Output};
 use hauchiwa::{Website};
 use indexmap::IndexMap;
 use maud::{Render, html};
@@ -308,10 +309,11 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 
     let works = config.task().each(works).using((environment, sitemap, images, scripts, styles)).map(|site_data, work, (environment, sitemap, images, scripts, styles)| {
         let context = work.meta.path.as_str();
-        let
-        let rendered_markdown = render_markdown(context, &environment, &work.matter, &work.text);
+        let rendered_markdown = render_markdown(context, &environment, &work.matter, &work.text)?;
 
+        let base_style = styles.get("style.css")?;
 
+        let base_page = base(&work.matter, rendered_markdown, &[], &[&base_style.path])?;
         Ok(())
     })
 
