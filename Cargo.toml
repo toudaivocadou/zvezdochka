@@ -29,10 +29,10 @@ base64 = "0.22.1"
 rss = "2.0.12"
 log = "0.4.29"
 env_logger = "0.11.10"
-lol_html = "2.7.2"
 eyre = "0.6.12"
 color-eyre = "0.6.5"
 indexmap = "2.14.0"
+lol_html = "2.9.0"
 
 [dependencies.time]
 version = "0.3.47"
