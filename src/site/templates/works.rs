@@ -5,10 +5,10 @@ use crate::site::templates::functions::sns::sns_icon;
 use crate::site::util::image_or_gray;
 use crate::site::util::{author_list, reference};
 use crate::site::work::WorkMeta;
-use eyre::Report;
+use anyhow::Error;
 use maud::{Markup, PreEscaped, html};
 
-pub fn works(site_map: &SiteMap) -> Result<Markup, Report> {
+pub fn works(site_map: &SiteMap) -> Result<Markup, Error> {
     Ok(html! {
         section #hero {
             .container {
@@ -88,7 +88,7 @@ pub fn works(site_map: &SiteMap) -> Result<Markup, Report> {
     // };
 }
 
-pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Report> {
+pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
             a .member-link href=(format!("/works/releases/{}.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))) {
@@ -116,7 +116,7 @@ pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Repo
     })
 }
 
-pub fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Report> {
+pub fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
             a .member-link href=(
@@ -159,7 +159,7 @@ pub fn album_detail(
     sitemap: &SiteMap,
     album_meta: &AlbumMeta,
     content: &str,
-) -> Result<Markup, Report> {
+) -> Result<Markup, Error> {
     Ok(html! {
         section #work-section {
             .work-detail-container {
@@ -302,8 +302,8 @@ pub fn album_detail(
 pub fn work_detail(
     sitemap: &SiteMap,
     work_meta: &WorkMeta,
-    content: &str,
-) -> Result<Markup, Report> {
+    content: String,
+) -> Result<Markup, Error> {
     Ok(html! {
         section #work-section {
             .work-detail-container {

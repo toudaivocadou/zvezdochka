@@ -1,10 +1,10 @@
-use eyre::Report;
+use anyhow::Error;
 use maud::{Markup, html};
 use url::Url;
 
 use crate::site::templates::functions::sns::sns_icon;
 
-pub fn footer() -> Result<Markup, Report> {
+pub fn footer() -> Result<Markup, Error> {
     Ok(html! {
         footer {
             .container {

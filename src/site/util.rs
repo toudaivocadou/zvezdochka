@@ -1,8 +1,8 @@
 use crate::site::metadata::RenderableMetadata;
 use crate::site::sitemap::SiteMap;
+use anyhow::Error;
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
-use eyre::Report;
 use maud::{Markup, PreEscaped, html};
 use minijinja::Environment;
 use pulldown_cmark::html::push_html;
@@ -22,9 +22,9 @@ pub fn render_markdown(
     environment: &Environment,
     meta: &impl RenderableMetadata,
     text: &str,
-) -> Result<String, Report> {
+) -> Result<String, Error> {
     let templated = environment.render_str(text, meta).map_err(|why| {
-        Report::msg(format!(
+        Error::msg(format!(
             "In file {rendering_context}, failed to render minijinja template: {why}"
         ))
     })?;
@@ -55,13 +55,13 @@ fn slash_guard(root: &str, thing: &str) -> String {
     }
 }
 
-pub fn rewrite_link(site_url: &str, link: String) -> Result<String, Report> {
+pub fn rewrite_link(site_url: &str, link: String) -> Result<String, Error> {
     if link.starts_with("..") || link.starts_with("#") || link.starts_with("https://") {
         return Ok(link);
     }
     if let Ok(mut url) = Url::parse(&link) {
         url.set_scheme("https")
-            .map_err(|_| Report::msg("failed to set URL scheme"))?;
+            .map_err(|_| Error::msg("failed to set URL scheme"))?;
         return Ok(url.to_string());
     }
     // run our transformations

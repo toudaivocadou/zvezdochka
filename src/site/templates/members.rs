@@ -1,4 +1,4 @@
-use eyre::Report;
+use anyhow::Error;
 use maud::{Markup, PreEscaped, html};
 
 use crate::site::{
@@ -11,7 +11,7 @@ use crate::site::{
     work::WorkMeta,
 };
 
-pub fn members(site_map: &SiteMap) -> Result<Markup, Report> {
+pub fn members(site_map: &SiteMap) -> Result<Markup, Error> {
     Ok(html! {
         section #members-hero {
             .container {
@@ -32,7 +32,7 @@ pub fn members(site_map: &SiteMap) -> Result<Markup, Report> {
     })
 }
 
-pub fn member_card(member: &MemberMeta) -> Result<Markup, Report> {
+pub fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
     let member_links_len = member.links.len();
     Ok(html! {
         .member-item {
@@ -71,7 +71,7 @@ pub fn member_detail(
     member: &MemberMeta,
     site_map: &SiteMap,
     content: String,
-) -> Result<Markup, Report> {
+) -> Result<Markup, Error> {
     let recent_works = site_map
         .works
         .iter()
@@ -203,7 +203,7 @@ pub fn featured_work_detail(work: &WorkMeta) -> Markup {
     }
 }
 
-pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Report> {
+pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
@@ -236,7 +236,7 @@ pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Report> {
     })
 }
 
-pub fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Report> {
+pub fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {

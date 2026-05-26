@@ -1,4 +1,4 @@
-use eyre::Report;
+use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -36,8 +36,8 @@ impl SocialLinkType {
         }
     }
 
-    pub fn from_url(url: &Url) -> Result<SocialLinkType, Report> {
-        let domain = url.domain().ok_or(Report::msg(format!("Bad URL: {url}")))?;
+    pub fn from_url(url: &Url) -> Result<SocialLinkType, Error> {
+        let domain = url.domain().ok_or(Error::msg(format!("Bad URL: {url}")))?;
         let url_type = match domain {
             "twitter.com" => SocialLinkType::Twitter,
             "x.com" => SocialLinkType::Twitter,

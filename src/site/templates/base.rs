@@ -2,8 +2,8 @@ use crate::site::{
     metadata::RenderableMetadata,
     templates::partials::{footer::footer, head::html_head, navbar::navbar},
 };
+use anyhow::Error;
 use camino::Utf8PathBuf;
-use eyre::Report;
 use maud::{DOCTYPE, Markup, Render, html};
 
 pub fn base(
@@ -11,7 +11,7 @@ pub fn base(
     inner: impl Render,
     scripts: &[&Utf8PathBuf],
     style: &[&Utf8PathBuf],
-) -> Result<Markup, Report> {
+) -> Result<Markup, Error> {
     Ok(html! {
         (DOCTYPE)
         html lang="ja" {

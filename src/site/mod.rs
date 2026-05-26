@@ -1,10 +1,8 @@
 use crate::site::album::AlbumMeta;
 use crate::site::member::{MemberMeta, WorkTitleOrSource};
 use crate::site::news::NewsMeta;
-use crate::site::read::{
-    parse_front_matter_and_fetch_contents, parse_post_meta, parse_work_meta, robots_txt,
-};
 use crate::site::sitemap::{MemberRef, SiteMap};
+use crate::site::templates::base::base;
 use crate::site::templates::error::notfound;
 use crate::site::templates::functions::embed::{embed, jinja_embed};
 use crate::site::templates::functions::member::jinja_member;
@@ -12,17 +10,18 @@ use crate::site::templates::functions::sns::jinja_sns_icon;
 use crate::site::templates::index::index;
 use crate::site::templates::join::join_vocadou;
 use crate::site::templates::members::{member_detail, members as member_overview};
-use crate::site::templates::news::{news_detail, news_posts, news_reference};
+use crate::site::templates::news::{news_detail, news_posts};
 use crate::site::templates::partials::navbar::Sections;
 use crate::site::templates::works::{
-    album_detail, album_reference, work_detail, work_reference, works as works_overview,
+    album_detail, work_detail, works as works_overview,
 };
 use crate::site::util::{
-    AudioFile, SvgData, markup_to_page, render_markdown, render_metadata_and_final_page, rewrite_html, rewrite_link, rewrite_page, rewrite_settings, set_external_bin_url, set_site_root, set_site_url, site_root
+     render_markdown, rewrite_link
 };
 use crate::site::work::{WorkMeta};
 use clap::{Parser, ValueEnum};
-use hauchiwa::error::HauchiwaError;
+use anyhow::Error;
+use hauchiwa::error::{BuildError, HauchiwaError};
 use hauchiwa::tracing::{error, info, warn};
 use hauchiwa::{Blueprint};
 use hauchiwa::{Website};
@@ -167,7 +166,7 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 
     let sitemap = config.task().using((members, works, albums, news)).merge(
         |_, (mems, works, albs, newses)| {
-            let members = mems
+            let mut members = mems
                 .values()
                 .map(|m| (m.matter.ascii_name.clone(), *m.matter))
                 .collect::<IndexMap<MemberRef, MemberMeta>>();
@@ -324,11 +323,11 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 
     // build work pages
 
-    let works = config.task().each(works).using((environment, sitemap, images)).map(|site_data, work, (environment, sitemap)| {
-        let context = work.meta.path
-        let rendered_markdown = render_markdown(&site_data.env.data, &environment, &work.matter, &work.text);
-
-
+    let works = config.task().each(works).using((environment, sitemap, images)).map(|site_data, work, (environment, sitemap, image)| {
+        let context = work.meta.path.to_string();
+        let rendered_markdown = render_markdown(&context, &environment, &work.matter, &work.text)?;
+        let templated_html = work_detail(sitemap, &work.matter, rendered_markdown)?;
+        let full_html = base(&work.matter, rendered_markdown, &[], style)
 
         Ok(())
     })

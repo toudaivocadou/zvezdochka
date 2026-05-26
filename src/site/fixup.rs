@@ -1,5 +1,5 @@
+use anyhow::Error;
 use base64::{Engine, prelude::BASE64_URL_SAFE_NO_PAD};
-use eyre::Report;
 use hauchiwa::{
     Tracker,
     loader::{Image, Script, Stylesheet},
@@ -17,7 +17,7 @@ pub fn fixup_html(
     build_id: Option<u64>,
     trackers: TrackerSet,
     html: &str,
-) -> Result<String, Report> {
+) -> Result<String, Error> {
     let settings = Settings {
         element_content_handlers: vec![
             element!("img[src]", |el| {
@@ -26,7 +26,7 @@ pub fn fixup_html(
                     return Ok(());
                 }
                 let new_src = fixup_image(&trackers.images, Cow::Borrowed(current_src.as_str()))
-                    .map_err(|why| Into::<Report>::into(why))?;
+                    .map_err(|why| Into::<Error>::into(why))?;
                 el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref());
                 Ok(())
             }),
@@ -36,7 +36,7 @@ pub fn fixup_html(
                     return Ok(());
                 }
                 let new_src = fixup_scripts(&trackers.scripts, Cow::Borrowed(current_src.as_str()))
-                    .map_err(|why| Into::<Report>::into(why))?;
+                    .map_err(|why| Into::<Error>::into(why))?;
                 el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref());
                 Ok(())
             }),
@@ -55,9 +55,9 @@ pub fn fixup_html(
 
                 let new_href = match rel_type.as_str() {
                     "stylesheet" => fixup_styles(&trackers.styles, cow_href)
-                        .map_err(|why| Into::<Report>::into(why))?,
+                        .map_err(|why| Into::<Error>::into(why))?,
                     "script" => fixup_scripts(&trackers.scripts, cow_href)
-                        .map_err(|why| Into::<Report>::into(why))?,
+                        .map_err(|why| Into::<Error>::into(why))?,
                     _ => {
                         return Ok(());
                     }
@@ -78,7 +78,7 @@ pub fn fixup_html(
                 let new_content = match property.as_str() {
                     "og:url" => cow_current_content,
                     "og:image" => fixup_image(&trackers.images, cow_current_content)
-                        .map_err(|why| Into::<Report>::into(why))?,
+                        .map_err(|why| Into::<Error>::into(why))?,
                     _ => {
                         return Ok(());
                     }
@@ -105,7 +105,7 @@ pub fn fixup_html(
         ..Settings::default()
     };
 
-    rewrite_str(html, settings).map_err(|why| Report::new(why))
+    rewrite_str(html, settings).map_err(|why| Error::new(why))
 }
 
 fn build_id_to_str(build_id: u64) -> String {
@@ -128,7 +128,7 @@ fn fixup_abs_link<'a>(build_id: Option<u64>, destination: Cow<'a, str>) -> Cow<'
 fn fixup_image<'a>(
     images: &Tracker<Image>,
     destination: Cow<'a, str>,
-) -> Result<Cow<'a, str>, Report> {
+) -> Result<Cow<'a, str>, Error> {
     if !(destination.ends_with(".jpg")
         || destination.ends_with(".jpeg")
         || destination.ends_with(".png")
@@ -142,13 +142,13 @@ fn fixup_image<'a>(
     images
         .get(intermediary)
         .map(|img| Cow::Owned(img.default.to_string()))
-        .map_err(|why| Report::new(why))
+        .map_err(|why| Error::new(why))
 }
 
 fn fixup_styles<'a>(
     styles: &Tracker<Stylesheet>,
     destination: Cow<'a, str>,
-) -> Result<Cow<'a, str>, Report> {
+) -> Result<Cow<'a, str>, Error> {
     if !destination.ends_with(".css") {
         return Ok(destination);
     }
@@ -158,13 +158,13 @@ fn fixup_styles<'a>(
     styles
         .get(intermediary)
         .map(|stylesheet| Cow::Owned(stylesheet.path.to_string()))
-        .map_err(|why| Report::new(why))
+        .map_err(|why| Error::new(why))
 }
 
 fn fixup_scripts<'a>(
     scripts: &Tracker<Script>,
     destination: Cow<'a, str>,
-) -> Result<Cow<'a, str>, Report> {
+) -> Result<Cow<'a, str>, Error> {
     if !destination.ends_with(".js") {
         return Ok(destination);
     }
@@ -174,7 +174,7 @@ fn fixup_scripts<'a>(
     scripts
         .get(intermediary)
         .map(|script| Cow::Owned(script.path.to_string()))
-        .map_err(|why| Report::new(why))
+        .map_err(|why| Error::new(why))
 }
 
 fn prefixing_it_up<'a>(prefix: &'static str, destination: Cow<'a, str>) -> Cow<'a, str> {

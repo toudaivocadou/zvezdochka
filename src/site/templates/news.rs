@@ -2,12 +2,12 @@ use crate::site::sitemap::SiteMap;
 use crate::site::templates::functions::sns::sns_icon;
 use crate::site::util::image_or_gray;
 use crate::site::{news::NewsMeta, util::reference};
-use eyre::Report;
+use anyhow::Error;
 use maud::{Markup, PreEscaped, html};
 
 pub const NEWS_MISSING_AUTHOR: &'static str = "東大ボカロP同好会";
 
-pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Report> {
+pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Error> {
     // TODO: pagination. this will get long! yell at peng if we get >100!
 
     Ok(html! {
@@ -47,7 +47,7 @@ pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Report> {
     // base(sack, &metadata, Some(&[]), inner)
 }
 
-pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Report> {
+pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
@@ -87,7 +87,7 @@ pub fn news_detail(
     site_map: &SiteMap,
     news_meta: &NewsMeta,
     content: &str,
-) -> Result<Markup, Report> {
+) -> Result<Markup, Error> {
     Ok(html! {
         section #post-detail {
             .member-detail-container {
