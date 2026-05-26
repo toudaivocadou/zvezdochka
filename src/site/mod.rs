@@ -327,7 +327,7 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
         let context = work.meta.path.to_string();
         let rendered_markdown = render_markdown(&context, &environment, &work.matter, &work.text)?;
         let templated_html = work_detail(sitemap, &work.matter, rendered_markdown)?;
-        let full_html = base(&work.matter, rendered_markdown, &[], style)
+        let full_html = base(&work.matter, rendered_markdown, &[], &])
 
         Ok(())
     })
