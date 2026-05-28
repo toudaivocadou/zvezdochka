@@ -1,11 +1,11 @@
 use crate::site::die_linky::SocialLinkType;
-use eyre::Report;
+use anyhow::Error;
 use maud::{Markup, html};
 use minijinja::Error as JinjaError;
 use minijinja::ErrorKind;
 use url::Url;
 
-pub fn sns_icon(link: &Url) -> Result<Markup, Report> {
+pub fn sns_icon(link: &Url) -> Result<Markup, Error> {
     let link_type = SocialLinkType::from_url(link)?;
     let sns_url_icon = link_type.to_svg_icon();
     let special_style = match link_type {

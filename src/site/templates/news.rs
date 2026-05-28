@@ -7,7 +7,7 @@ use maud::{Markup, PreEscaped, html};
 
 pub const NEWS_MISSING_AUTHOR: &'static str = "東大ボカロP同好会";
 
-pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Error> {
+pub fn news_index(site_map: &SiteMap) -> Result<Markup, Error> {
     // TODO: pagination. this will get long! yell at peng if we get >100!
 
     Ok(html! {
@@ -47,7 +47,7 @@ pub fn news_posts(site_map: &SiteMap) -> Result<Markup, Error> {
     // base(sack, &metadata, Some(&[]), inner)
 }
 
-pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
+fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
@@ -55,7 +55,7 @@ pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Err
             }
             .post-info {
                 h3 .post-card-title {
-                    a href=(format!("/news/{}.html", reference(&news_meta.title, &[news_meta.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                    a href=(format!("/news/{}/index.html", reference(&news_meta.title, &[news_meta.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
                         (news_meta.title)
                     }
                 }
@@ -63,7 +63,7 @@ pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Err
                     (news_meta.date)
                 }
                 @if let Some(ascii_author) = &news_meta.author {
-                    a href=(format!("/members/{}.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
+                    a href=(format!("/members/{}/index.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
                 } @else {
                     p { "東大ボカロP同好会" }
                 }
@@ -86,7 +86,7 @@ pub fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Err
 pub fn news_detail(
     site_map: &SiteMap,
     news_meta: &NewsMeta,
-    content: &str,
+    content: String,
 ) -> Result<Markup, Error> {
     Ok(html! {
         section #post-detail {
@@ -99,7 +99,7 @@ pub fn news_detail(
                         h2 { (news_meta.title) }
                         p { (news_meta.date) }
                         @if let Some(ascii_author) = &news_meta.author {
-                            a href=(format!("/members/{}.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
+                            a href=(format!("/members/{}/index.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
                         } @else {
                             p { "東大ボカロP同好会" }
                         }

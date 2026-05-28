@@ -11,7 +11,7 @@ use crate::site::{
     work::WorkMeta,
 };
 
-pub fn members(site_map: &SiteMap) -> Result<Markup, Error> {
+pub fn member_index(site_map: &SiteMap) -> Result<Markup, Error> {
     Ok(html! {
         section #members-hero {
             .container {
@@ -32,11 +32,11 @@ pub fn members(site_map: &SiteMap) -> Result<Markup, Error> {
     })
 }
 
-pub fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
+fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
     let member_links_len = member.links.len();
     Ok(html! {
         .member-item {
-            a .member-link href=(format!("/members/{}.html", member.ascii_name)) {
+            a .member-link href=(format!("/members/{}/index.html", member.ascii_name)) {
                 .member-card {
                     .member-image .img-placeholder {
                         img .member-image .img-placeholder src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
@@ -68,8 +68,8 @@ pub fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
 
 // TODO: add "worked on albums" and "posts".
 pub fn member_detail(
-    member: &MemberMeta,
     site_map: &SiteMap,
+    member: &MemberMeta,
     content: String,
 ) -> Result<Markup, Error> {
     let recent_works = site_map
@@ -167,7 +167,7 @@ pub fn member_detail(
                 }
 
                 .back-button  {
-                    a href="../members.html" class="margin-top: 50px;" {
+                    a href="../members/index.html" class="margin-top: 50px;" {
                         "メンバー一覧に戻る"
                     }
                 }
@@ -176,7 +176,7 @@ pub fn member_detail(
     })
 }
 
-pub fn featured_work_detail(work: &WorkMeta) -> Markup {
+fn featured_work_detail(work: &WorkMeta) -> Markup {
     html! {
         .work-item-detail id=(urlencoding::encode(&work.title)) {
             h4 { (work.title) }
@@ -195,7 +195,7 @@ pub fn featured_work_detail(work: &WorkMeta) -> Markup {
             }
 
             .click-button{
-                a href=(format!("/works/releases/{}.html", reference(&work.title, &work.authors, &work.additional_authors))) {
+                a href=(format!("/works/releases/{}/index.html", reference(&work.title, &work.authors, &work.additional_authors))) {
                     p { "詳しく見る" }
                 }
             }
@@ -203,7 +203,7 @@ pub fn featured_work_detail(work: &WorkMeta) -> Markup {
     }
 }
 
-pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
+fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
@@ -211,7 +211,7 @@ pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/news/{}.html", reference(&news.title, &[news.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                    a href=(format!("/news/{}/index.html", reference(&news.title, &[news.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
                         (news.title)
                     }
                 }
@@ -236,7 +236,7 @@ pub fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
     })
 }
 
-pub fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
+fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
@@ -244,7 +244,7 @@ pub fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Resul
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))) {
+                    a href=(format!("/works/albums/{}/index.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))) {
                         (album_meta.title)
                     }
                 }

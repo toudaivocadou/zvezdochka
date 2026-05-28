@@ -16,7 +16,7 @@ pub struct TrackerSet<'a> {
 pub fn fixup_html(
     build_id: Option<u64>,
     trackers: TrackerSet,
-    html: &str,
+    html: String,
 ) -> Result<String, Error> {
     let settings = Settings {
         element_content_handlers: vec![
@@ -105,7 +105,7 @@ pub fn fixup_html(
         ..Settings::default()
     };
 
-    rewrite_str(html, settings).map_err(|why| Error::new(why))
+    rewrite_str(&html, settings).map_err(|why| Error::new(why))
 }
 
 fn build_id_to_str(build_id: u64) -> String {

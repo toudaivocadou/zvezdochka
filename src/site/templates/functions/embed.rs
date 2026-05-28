@@ -1,12 +1,11 @@
-use eyre::Report;
+use crate::site::die_linky::SocialLinkType;
+use anyhow::Error;
 use maud::{Render, html};
 use minijinja::{Error as JinjaError, ErrorKind};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::site::die_linky::SocialLinkType;
-
-pub fn embed(link: &str) -> Result<impl Render, Report> {
+pub fn embed(link: &str) -> Result<impl Render, Error> {
     if link.ends_with(".png")
         || link.ends_with(".jpeg")
         || link.ends_with(".jpg")
@@ -49,7 +48,7 @@ pub fn embed(link: &str) -> Result<impl Render, Report> {
             // ))?;
 
             // if bluesky_oembed.status() != StatusCode::OK {
-            //     return Err(Report::msg("failed to get bluesky embed"));
+            //     return Err(Error::msg("failed to get bluesky embed"));
             // }
 
             // let embed_html = bluesky_oembed.json::<OEmbed>()?;
@@ -66,7 +65,7 @@ pub fn embed(link: &str) -> Result<impl Render, Report> {
 
             // Err(Error::msg("returned oembed did not match any known items."))
 
-            Err(Report::msg(format!(
+            Err(Error::msg(format!(
                 "Bluesky is currently not supported for making embeds. If you actually run into this issue let peng know! {link}"
             )))
         }
@@ -74,7 +73,7 @@ pub fn embed(link: &str) -> Result<impl Render, Report> {
             let youtube_video_id = url_parse
                 .query_pairs()
                 .find(|(key, _)| key == "v")
-                .ok_or(Report::msg(format!("invalid youtube link: {link}")))?
+                .ok_or(Error::msg(format!("invalid youtube link: {link}")))?
                 .1;
             let embed_link = format!("https://www.youtube.com/embed/{youtube_video_id}");
 
@@ -87,11 +86,9 @@ pub fn embed(link: &str) -> Result<impl Render, Report> {
         SocialLinkType::NicoDouga => {
             let nnd_video_id = url_parse
                 .path_segments()
-                .ok_or(Report::msg(Report::msg(format!(
-                    "invalid NND link: {link}"
-                ))))?
+                .ok_or(Error::msg(Error::msg(format!("invalid NND link: {link}"))))?
                 .find(|segment| segment.starts_with("sm"))
-                .ok_or(Report::msg(Report::msg(format!(
+                .ok_or(Error::msg(Error::msg(format!(
                     "No ID found in NND link: {link}"
                 ))))?;
             let nnd_video_link = format!("https://embed.nicovideo.jp/watch/{nnd_video_id}");
@@ -101,7 +98,7 @@ pub fn embed(link: &str) -> Result<impl Render, Report> {
                 }
             })
         }
-        _ => Err(Report::msg(format!(
+        _ => Err(Error::msg(format!(
             "unknown/unsupported embed type: {link}"
         ))),
     }

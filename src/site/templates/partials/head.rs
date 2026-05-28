@@ -17,6 +17,7 @@ pub fn html_head(
             @for style in styles {
                 link rel="stylesheet" href=(style);
             }
+            link rel="stylesheet" href="styles/style.css";
             link rel="icon" type="image/x-icon" href="/favicon.ico";
             @for script_url in scripts {
                 script async defer src=(script_url) {}

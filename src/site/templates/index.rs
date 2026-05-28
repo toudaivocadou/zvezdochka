@@ -20,7 +20,7 @@ pub fn index() -> Markup {
             .container {
                 h2 { "ボカロ、作ろう。" }
                 p { "ボーカロイド楽曲の制作を通じて交流するサークルです。" }
-                a href="/join.html" .btn { "入会案内" }
+                a href="/join/index.html" .btn { "入会案内" }
             }
         }
 
@@ -78,7 +78,7 @@ pub fn index() -> Markup {
                         }
                         div style="margin-top: auto;" {
                             .click-button{
-                                a href="/works.html" {
+                                a href="/works/index.html" {
                                 p {
                                     "全曲一覧になる"
                                 }

@@ -1,5 +1,7 @@
 use crate::site::album::AlbumMeta;
+use crate::site::fixup::{TrackerSet, fixup_html};
 use crate::site::member::{MemberMeta, WorkTitleOrSource};
+use crate::site::metadata::GenericMeta;
 use crate::site::news::NewsMeta;
 use crate::site::sitemap::{MemberRef, SiteMap};
 use crate::site::templates::base::base;
@@ -9,22 +11,21 @@ use crate::site::templates::functions::member::jinja_member;
 use crate::site::templates::functions::sns::jinja_sns_icon;
 use crate::site::templates::index::index;
 use crate::site::templates::join::join_vocadou;
-use crate::site::templates::members::{member_detail, members as member_overview};
-use crate::site::templates::news::{news_detail, news_posts};
+use crate::site::templates::members::{member_detail, member_index, members as member_overview};
+use crate::site::templates::news::{NEWS_MISSING_AUTHOR, news_detail, news_posts};
 use crate::site::templates::partials::navbar::Sections;
-use crate::site::templates::works::{
-    album_detail, work_detail, works as works_overview,
-};
+use crate::site::templates::works::{album_detail, work_detail, works as works_overview};
 use crate::site::util::{
-     render_markdown, rewrite_link
+    BuildSteps, MajorContext, SubBuildStep, reference, render_markdown, rewrite_link,
 };
-use crate::site::work::{WorkMeta};
-use clap::{Parser, ValueEnum};
+use crate::site::work::WorkMeta;
 use anyhow::Error;
+use camino::Utf8PathBuf;
+use clap::{Parser, ValueEnum};
+use hauchiwa::Website;
 use hauchiwa::error::{BuildError, HauchiwaError};
 use hauchiwa::tracing::{error, info, warn};
-use hauchiwa::{Blueprint};
-use hauchiwa::{Website};
+use hauchiwa::{Blueprint, Output};
 use indexmap::IndexMap;
 use maud::{Render, html};
 use minijinja::Environment;
@@ -33,15 +34,16 @@ use minijinja_contrib::pycompat::unknown_method_callback;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Instant;
 use url::Url;
 
 mod album;
 mod die_linky;
+mod fixup;
 mod member;
 mod metadata;
 mod news;
-mod fixup;
 mod sitemap;
 pub mod templates;
 mod util;
@@ -78,11 +80,23 @@ pub struct SiteData {
     pub site_url: String,
     pub make_vendoring: bool,
     pub offline_mode: bool,
+    pub build_id: Option<u64>,
 }
 
-pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, offline_mode: bool) -> Result<(), HauchiwaError> {
+pub fn buildsite(
+    build_id: Option<u64>,
+    site_url: String,
+    source_path: String,
+    make_vendoring: bool,
+    offline_mode: bool,
+) -> Result<(), HauchiwaError> {
     let time_start = Instant::now();
-    let site_data = SiteData { site_url, make_vendoring, offline_mode };
+    let site_data = SiteData {
+        site_url,
+        make_vendoring,
+        offline_mode,
+        build_id,
+    };
     info!("Starting Site Build. サイト建築始め中");
     info!("Base Site URL: {site_url}");
     info!("Site Source Path: {source_path}");
@@ -165,10 +179,12 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
     // build SiteMap
 
     let sitemap = config.task().using((members, works, albums, news)).merge(
-        |_, (mems, works, albs, newses)| {
+        |site_data, (mems, works, albs, newses)| {
+
+
             let mut members = mems
                 .values()
-                .map(|m| (m.matter.ascii_name.clone(), *m.matter))
+                .map(|m| (m.matter.ascii_name.clone(), *m.matter.clone()))
                 .collect::<IndexMap<MemberRef, MemberMeta>>();
 
             members.sort_by(|_, a, _, b| {
@@ -307,6 +323,9 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
             //         }
             //     }
             // }
+            if should_error {
+                return Err(Error::me)
+            }
 
 
             let site_map = SiteMap {
@@ -319,18 +338,239 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
         },
     );
 
+    let work_pages = config
+        .task()
+        .each(works)
+        .using((environment, sitemap, images, scripts, styles))
+        .map(
+            |site_data, work, (environment, sitemap, image, scripts, styles)| {
+                let major_context = MajorContext {
+                    step: BuildSteps::Works,
+                    file: Some(work.meta.path.clone()),
+                    build_id: site_data.env.data.build_id,
+                };
 
+                let rendered_markdown = render_markdown(&environment, &work.matter, &work.text)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
+                    })?;
+                let templated_html = work_detail(sitemap, &work.matter, rendered_markdown)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::Templating))
+                    })?;
+                let full_html = base(&work.matter, templated_html, &[], &[]).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
 
-    // build work pages
+                let path = reference(
+                    &work.matter.title,
+                    &work.matter.authors,
+                    &work.matter.additional_authors,
+                );
 
-    let works = config.task().each(works).using((environment, sitemap, images)).map(|site_data, work, (environment, sitemap, image)| {
-        let context = work.meta.path.to_string();
-        let rendered_markdown = render_markdown(&context, &environment, &work.matter, &work.text)?;
-        let templated_html = work_detail(sitemap, &work.matter, rendered_markdown)?;
-        let full_html = base(&work.matter, rendered_markdown, &[], &])
+                let trackers = TrackerSet {
+                    images: image,
+                    scripts,
+                    styles,
+                };
 
-        Ok(())
-    })
+                let html_fixup = fixup_html(
+                    site_data.env.data.build_id,
+                    trackers,
+                    full_html.into_string(),
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+                Ok(Output::html(
+                    format!("/works/releases/{path}.html"),
+                    html_fixup,
+                ))
+            },
+        );
+
+    let album_pages = config
+        .task()
+        .each(albums)
+        .using((environment, sitemap, images, scripts, styles))
+        .map(
+            |site_data, album, (environment, sitemap, image, scripts, styles)| {
+                let major_context = MajorContext {
+                    step: BuildSteps::Albums,
+                    file: Some(album.meta.path.clone()),
+                    build_id: site_data.env.data.build_id,
+                };
+
+                let rendered_markdown = render_markdown(&environment, &album.matter, &album.text)
+                    .map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
+                })?;
+                let templated_html = album_detail(sitemap, &album.matter, rendered_markdown)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::Templating))
+                    })?;
+                let full_html = base(&album.matter, templated_html, &[], &[]).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
+
+                let path = reference(
+                    &album.matter.title,
+                    &album.matter.authors,
+                    &album.matter.additional_authors,
+                );
+
+                let trackers = TrackerSet {
+                    images: image,
+                    scripts,
+                    styles,
+                };
+
+                let html_fixup = fixup_html(
+                    site_data.env.data.build_id,
+                    trackers,
+                    full_html.into_string(),
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+                Ok(Output::html(
+                    format!("/albums/releases/{path}/index.html"),
+                    html_fixup,
+                ))
+            },
+        );
+
+    let news_pages = config
+        .task()
+        .each(news)
+        .using((environment, sitemap, images, scripts, styles))
+        .map(
+            |site_data, news, (environment, sitemap, image, scripts, styles)| {
+                let major_context = MajorContext {
+                    step: BuildSteps::News,
+                    file: Some(news.meta.path.clone()),
+                    build_id: site_data.env.data.build_id,
+                };
+
+                let rendered_markdown = render_markdown(&environment, &news.matter, &news.text)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
+                    })?;
+                let templated_html = news_detail(sitemap, &news.matter, rendered_markdown)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::Templating))
+                    })?;
+                let full_html = base(&news.matter, templated_html, &[], &[]).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
+
+                let path = reference(
+                    &news.matter.title,
+                    &[&news
+                        .matter
+                        .author
+                        .as_ref()
+                        .map(|x| x.as_str())
+                        .unwrap_or(NEWS_MISSING_AUTHOR)],
+                    &[],
+                );
+
+                let trackers = TrackerSet {
+                    images: image,
+                    scripts,
+                    styles,
+                };
+
+                let html_fixup = fixup_html(
+                    site_data.env.data.build_id,
+                    trackers,
+                    full_html.into_string(),
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+                Ok(Output::html(format!("/news/{path}/index.html"), html_fixup))
+            },
+        );
+
+    let member_pages = config
+        .task()
+        .each(members)
+        .using((environment, sitemap, images, scripts, styles))
+        .map(
+            |site_data, members, (environment, sitemap, image, scripts, styles)| {
+                let major_context = MajorContext {
+                    step: BuildSteps::Members,
+                    file: Some(members.meta.path.clone()),
+                    build_id: site_data.env.data.build_id,
+                };
+                let rendered_markdown =
+                    render_markdown(&environment, &members.matter, &members.text).map_err(
+                        |why| {
+                            why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
+                        },
+                    )?;
+                let templated_html = member_detail(sitemap, &members.matter, rendered_markdown)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::Templating))
+                    })?;
+                let full_html = base(&members.matter, templated_html, &[], &[]).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
+
+                let trackers = TrackerSet {
+                    images: image,
+                    scripts,
+                    styles,
+                };
+
+                let html_fixup = fixup_html(
+                    site_data.env.data.build_id,
+                    trackers,
+                    full_html.into_string(),
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+                Ok(Output::html(
+                    format!("/members/{}/index.html", &members.matter.ascii_name),
+                    html_fixup,
+                ))
+            },
+        );
+
+    let member_index_page = config
+        .task()
+        .name("Member Index Page")
+        .using((sitemap, images, scripts, styles))
+        .merge(|site_data, (sitemap, images, scripts, styles)| {
+            let major_context = MajorContext {
+                step: BuildSteps::MemberIndex,
+                file: None,
+                build_id: site_data.env.data.build_id,
+            };
+            let member_index = member_index(sitemap).map_err(|why| {
+                why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+            })?;
+
+            let member_index_metadata = GenericMeta {
+                path: "/members/index.html",
+                section: Sections::Members,
+                title: "メンバー紹介",
+            };
+
+            let full_html = base(&member_index_metadata, member_index, &[], &[])?;
+            let trackers = TrackerSet {
+                images,
+                scripts,
+                styles,
+            };
+
+            let html_fixup = fixup_html(
+                site_data.env.data.build_id,
+                trackers,
+                full_html.into_string(),
+            )
+            .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+            Ok(Output::html("/members/index.html", html_fixup))
+        });
 
     // start site dynamic page construction
     Ok(())
@@ -474,7 +714,6 @@ pub fn buildsite(site_url: String, source_path: String, make_vendoring: bool, of
 //                 "BUILD-{}: Finished all pre-build checks.",
 //                 ctx.get_globals().data.build_id
 //             );
-
 
 //             info!(
 //                 "BUILD-{}: Starting rendering pages.",

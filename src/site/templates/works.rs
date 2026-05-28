@@ -8,11 +8,11 @@ use crate::site::work::WorkMeta;
 use anyhow::Error;
 use maud::{Markup, PreEscaped, html};
 
-pub fn works(site_map: &SiteMap) -> Result<Markup, Error> {
+pub fn work_album_index(site_map: &SiteMap) -> Result<Markup, Error> {
     Ok(html! {
         section #hero {
             .container {
-                h2 { "リリース" }
+                h2 { "作品" }
                 p { "東京大学ボカロP同好会のメンバーの作品目録です。" }
             }
         }
@@ -21,7 +21,7 @@ pub fn works(site_map: &SiteMap) -> Result<Markup, Error> {
             .container .filters {
                 .click-button {
                     a .filter-link href="#songs" {
-                        p { "リリース" }
+                        p { "音楽のリリース" }
                     }
                 }
                 .click-button {
@@ -88,13 +88,13 @@ pub fn works(site_map: &SiteMap) -> Result<Markup, Error> {
     // };
 }
 
-pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
+fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
-            a .member-link href=(format!("/works/releases/{}.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))) {
+            a .member-link href=(format!("/works/releases/{}/index.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))) {
                 .work-card {
                     h4 .member-info {
-                        a .member-link href=(format!("/works/releases/{}.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))){
+                        a .member-link href=(format!("/works/releases/{}/index.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))){
                             (work_meta.title)
                         }
                     }
@@ -116,16 +116,16 @@ pub fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Erro
     })
 }
 
-pub fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
+fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
             a .member-link href=(
-                format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
+                format!("/works/albums/{}/index.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
             ) {
                 .work-card {
                     h4 .member-info {
                         a href=(
-                            format!("/works/albums/{}.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
+                            format!("/works/albums/{}/index.html", reference(&album_meta.title, &album_meta.authors, &album_meta.additional_authors))
                         ) {
                             (album_meta.title)
                         }
@@ -158,7 +158,7 @@ pub fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, E
 pub fn album_detail(
     sitemap: &SiteMap,
     album_meta: &AlbumMeta,
-    content: &str,
+    content: String,
 ) -> Result<Markup, Error> {
     Ok(html! {
         section #work-section {
@@ -277,7 +277,7 @@ pub fn album_detail(
 
 
                 .back-button{
-                    a href="../../works.html" {
+                    a href="../../works/index.html" {
                         "リリース集合一覧に戻る"
                     }
                 }
@@ -356,18 +356,20 @@ pub fn work_detail(
 
                 section #description .work-description {
                     h2 { "作品説明" }
-                    .description {
-                        (PreEscaped(content))
-                    }
+
                     @if content.is_empty() {
                         p .work-no-description {
                             em { "説明がありません。" }
+                        }
+                    } @else {
+                        .description {
+                            (PreEscaped(content))
                         }
                     }
                 }
 
                 .back-button{
-                    a href="../../works.html" {
+                    a href="../../works/index.html" {
                         "リリース集合一覧に戻る"
                     }
                 }

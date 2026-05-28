@@ -3,11 +3,13 @@ use crate::site::sitemap::SiteMap;
 use anyhow::Error;
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
+use camino::Utf8PathBuf;
 use maud::{Markup, PreEscaped, html};
 use minijinja::Environment;
 use pulldown_cmark::html::push_html;
 use pulldown_cmark::{Event, Options, Parser};
 use seahash::SeaHasher;
+use std::fmt::Display;
 use std::hash::Hasher;
 use time::Date;
 use time::macros::format_description;
@@ -18,16 +20,13 @@ pub fn shorten(content: &str) -> String {
 }
 
 pub fn render_markdown(
-    rendering_context: &str,
     environment: &Environment,
     meta: &impl RenderableMetadata,
     text: &str,
 ) -> Result<String, Error> {
-    let templated = environment.render_str(text, meta).map_err(|why| {
-        Error::msg(format!(
-            "In file {rendering_context}, failed to render minijinja template: {why}"
-        ))
-    })?;
+    let templated = environment
+        .render_str(text, meta)
+        .map_err(|why| Error::msg(format!("Failed to render minijinja template: {why}")))?;
 
     let options = Options::all();
     let mut output_str_buf = String::new();
@@ -122,7 +121,13 @@ where
     S: AsRef<str>,
 {
     let mut hasher = SeaHasher::default();
-    hasher.write(title.as_bytes());
+    let limited = title
+        .chars()
+        .take(30)
+        .map(|c| if c == ' ' { return '-' } else { return c })
+        .collect::<String>();
+    let encoded_title = urlencoding::encode(&limited);
+    hasher.write(encoded_title.as_bytes());
     known_authors
         .iter()
         .chain(unknown_authors)
@@ -131,7 +136,7 @@ where
             hasher.write(item.as_bytes());
         });
     let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_le_bytes());
-    format!("{title}-{cachebust}")
+    format!("{title}_{cachebust}")
 }
 
 pub fn known_invalid_link<S>(inner: &S) -> Markup
@@ -191,4 +196,83 @@ where
     }
 
     PreEscaped(authors_string)
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum BuildSteps {
+    SiteMap,
+    Members,
+    Works,
+    Albums,
+    News,
+    MemberIndex,
+    WorksAlbumIndex,
+    NewsIndex,
+    IndexPage,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum SubBuildStep {
+    ParsingMarkdown,
+    Templating,
+    BaseHTMLFilling,
+    Fixup,
+    Other(&'static str),
+}
+
+#[derive(Clone, Debug)]
+pub struct MajorContext {
+    pub step: BuildSteps,
+    pub file: Option<Utf8PathBuf>,
+    pub build_id: Option<u64>,
+}
+
+impl MajorContext {
+    pub fn with_substep(&self, substep: SubBuildStep) -> ErrorCtx {
+        ErrorCtx {
+            substep,
+            step: self.step,
+            file: self.file.clone(),
+            build_id: self.build_id,
+        }
+    }
+
+    pub fn with_str(&self, error: &'static str) -> ErrorCtx {
+        ErrorCtx {
+            substep: SubBuildStep::Other(error),
+            step: self.step,
+            file: self.file.clone(),
+            build_id: self.build_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ErrorCtx {
+    pub substep: SubBuildStep,
+    pub step: BuildSteps,
+    pub file: Option<Utf8PathBuf>,
+    pub build_id: Option<u64>,
+}
+
+impl Display for ErrorCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.build_id {
+            Some(id) => {
+                writeln!(f, "サイト建築中エラーが発生しました (BUILD ID: {})", id)?;
+            }
+            None => {
+                writeln!(f, "サイト建築中エラーが発生しました (BUILDなし)")?;
+            }
+        }
+        writeln!(
+            f,
+            "建築段階`{:?}`、副段階`{:?}`処理中...",
+            self.step, self.substep
+        )?;
+        if let Some(file) = &self.file {
+            writeln!(f, "ファイル`{}`処理中...", file)?;
+        }
+        Ok(())
+    }
 }
