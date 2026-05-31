@@ -121,13 +121,7 @@ where
     S: AsRef<str>,
 {
     let mut hasher = SeaHasher::default();
-    let limited = title
-        .chars()
-        .take(30)
-        .map(|c| if c == ' ' { return '-' } else { return c })
-        .collect::<String>();
-    let encoded_title = urlencoding::encode(&limited);
-    hasher.write(encoded_title.as_bytes());
+    hasher.write(title.as_bytes());
     known_authors
         .iter()
         .chain(unknown_authors)
@@ -135,8 +129,14 @@ where
             let item = item.as_ref();
             hasher.write(item.as_bytes());
         });
+    let limited = title
+        .chars()
+        .take(30)
+        .map(|c| if c == ' ' { return '-' } else { return c })
+        .collect::<String>();
+    let encoded_title = urlencoding::encode(&limited);
     let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_le_bytes());
-    format!("{title}_{cachebust}")
+    format!("{encoded_title}_{cachebust}")
 }
 
 pub fn known_invalid_link<S>(inner: &S) -> Markup
@@ -209,6 +209,7 @@ pub enum BuildSteps {
     WorksAlbumIndex,
     NewsIndex,
     IndexPage,
+    JoinPage,
 }
 
 #[derive(Copy, Clone, Debug)]

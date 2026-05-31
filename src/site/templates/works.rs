@@ -231,7 +231,7 @@ pub fn album_detail(
                 }
 
                 section #description .work-description {
-                    h2 { "説明" }
+                    h2 { "歌詞" }
                     .description {
                         (PreEscaped(content))
                     }

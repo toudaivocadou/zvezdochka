@@ -12,16 +12,16 @@ pub fn html_head(
             meta name="viewport" content="width=device-width, initial-scale=1.0";
             (metadata)
             @for script in scripts {
-                script async defer src=(script);
+                script async src=(script);
             }
             @for style in styles {
                 link rel="stylesheet" href=(style);
             }
             link rel="stylesheet" href="styles/style.css";
             link rel="icon" type="image/x-icon" href="/favicon.ico";
-            @for script_url in scripts {
-                script async defer src=(script_url) {}
-            }
+            // pagefind
+            link rel="stylesheet" href="/pagefind/pagefind-component-ui.css";
+            script src="/pagefind/pagefind-component-ui.js" type="module";
         }
     }
 }
