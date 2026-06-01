@@ -1,14 +1,20 @@
 use crate::site::album::AlbumMeta;
-use crate::site::sitemap::SiteMap;
+use crate::site::namemap::NameMap;
 use crate::site::templates::functions::embed::embed;
 use crate::site::templates::functions::sns::sns_icon;
 use crate::site::util::image_or_gray;
 use crate::site::util::{author_list, reference};
 use crate::site::work::WorkMeta;
 use anyhow::Error;
+use hauchiwa::Tracker;
+use hauchiwa::loader::Document;
 use maud::{Markup, PreEscaped, html};
 
-pub fn work_album_index(site_map: &SiteMap) -> Result<Markup, Error> {
+pub fn work_album_index(
+    names: &NameMap,
+    works: &Tracker<'_, Document<WorkMeta>>,
+    albums: &Tracker<'_, Document<AlbumMeta>>,
+) -> Result<Markup, Error> {
     Ok(html! {
         section #hero {
             .container {
@@ -39,15 +45,8 @@ pub fn work_album_index(site_map: &SiteMap) -> Result<Markup, Error> {
                 }
                 .zcontainer {
                     .member-grid {
-                        @for work in &site_map.works {
-                            (work_card(site_map, work)?)
-                        }
-                        @if site_map.works.is_empty() {
-                            p .work-description style="text-align: center;" {
-                                em {
-                                    "リリースがありません。"
-                                }
-                            }
+                        @for (_, work) in works.iter() {
+                            (work_card(names, &work.matter)?)
                         }
                     }
                 }
@@ -61,15 +60,8 @@ pub fn work_album_index(site_map: &SiteMap) -> Result<Markup, Error> {
                 }
                 .zcontainer {
                     .member-grid {
-                        @for album in &site_map.albums {
-                            (album_card(site_map, album)?)
-                        }
-                        @if site_map.albums.is_empty() {
-                            p .work-description style="text-align: center;" {
-                                em {
-                                    "アルバムがありません。"
-                                }
-                            }
+                        @for (_, album) in albums.iter() {
+                            (album_card(names, &album.matter)?)
                         }
                     }
                 }
@@ -88,7 +80,7 @@ pub fn work_album_index(site_map: &SiteMap) -> Result<Markup, Error> {
     // };
 }
 
-fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
+fn work_card(sitemap: &NameMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
             a .member-link href=(format!("/works/releases/{}/index.html", reference(&work_meta.title, &work_meta.authors, &work_meta.additional_authors))) {
@@ -116,7 +108,7 @@ fn work_card(sitemap: &SiteMap, work_meta: &WorkMeta) -> Result<Markup, Error> {
     })
 }
 
-fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
+fn album_card(sitemap: &NameMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .work-item {
             a .member-link href=(
@@ -156,7 +148,7 @@ fn album_card(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error
 }
 
 pub fn album_detail(
-    sitemap: &SiteMap,
+    sitemap: &NameMap,
     album_meta: &AlbumMeta,
     content: String,
 ) -> Result<Markup, Error> {
@@ -300,7 +292,7 @@ pub fn album_detail(
 }
 
 pub fn work_detail(
-    sitemap: &SiteMap,
+    sitemap: &NameMap,
     work_meta: &WorkMeta,
     content: String,
 ) -> Result<Markup, Error> {

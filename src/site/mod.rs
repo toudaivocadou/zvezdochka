@@ -2,8 +2,8 @@ use crate::site::album::AlbumMeta;
 use crate::site::fixup::{TrackerSet, fixup_html};
 use crate::site::member::MemberMeta;
 use crate::site::metadata::GenericMeta;
+use crate::site::namemap::{MemberRef, NameMap};
 use crate::site::news::NewsMeta;
-use crate::site::sitemap::{MemberRef, SiteMap};
 use crate::site::templates::base::base;
 use crate::site::templates::functions::embed::jinja_embed;
 use crate::site::templates::functions::member::jinja_member;
@@ -25,7 +25,6 @@ use indexmap::IndexMap;
 use minijinja::Environment;
 use minijinja_contrib::add_to_environment;
 use minijinja_contrib::pycompat::unknown_method_callback;
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -36,8 +35,8 @@ mod die_linky;
 mod fixup;
 mod member;
 mod metadata;
+mod namemap;
 mod news;
-mod sitemap;
 pub mod templates;
 mod util;
 mod work;
@@ -165,97 +164,34 @@ pub fn buildsite(
 
     // build SiteMap
 
-    let sitemap = config.task().using((members, works, albums, news)).merge(
-        |site_data, (mems, works, albs, newses)| {
-            let mut members = mems
+    let namemap = config.task().using((members, works, albums, news)).merge(
+        |_, (mems, works, albums, news)| {
+            let members = mems
                 .values()
-                .map(|m| (m.matter.ascii_name.clone(), *m.matter.clone()))
-                .collect::<IndexMap<MemberRef, MemberMeta>>();
-
-            members.sort_by(|_, a, _, b| {
-            let a_str = a.position.clone().unwrap_or_default();
-            let b_str = b.position.clone().unwrap_or_default();
-
-            if a_str == "代表" {
-                return Ordering::Less;
-            } else if b_str == "代表" {
-                return Ordering::Greater;
-            }
-
-            if a_str == "副代表" {
-                return Ordering::Less;
-            } else if b_str == "副代表" {
-                return Ordering::Greater;
-            }
-
-            if a_str == "広報" {
-                return Ordering::Less;
-            } else if b_str == "広報" {
-                return Ordering::Greater;
-            }
-
-            if a.position.is_some() && b.position.is_none() {
-                return Ordering::Less;
-            } else if a.position.is_none() && b.position.is_some() {
-                return Ordering::Greater;
-            } else if a.position == b.position {
-                return a.name.cmp(&b.name);
-            }
-
-            a.name.cmp(&b.name)
-        });
-
-            let mut works = works
-                .values()
-                .map(|w| *w.matter)
-                .collect::<Vec<WorkMeta>>();
-
-            works.sort_by(|a, b| {
-                a.date.cmp(&b.date)
-            });
-            works.reverse();
-
-            let mut albums = albs
-                .values()
-                .map(|a| *a.matter)
-                .collect::<Vec<AlbumMeta>>();
-
-            albums.sort_by(|a, b| {
-                a.date.cmp(&b.date)
-            });
-            albums.reverse();
-
-            let mut news = newses
-                .values()
-                .map(|n| *n.matter)
-                .collect::<Vec<NewsMeta>>();
-
-            news.sort_by(|a, b| {
-                a.date.cmp(&b.date)
-            });
-            news.reverse();
+                .map(|m| (m.matter.ascii_name.clone(), m.matter.name.clone()))
+                .collect::<IndexMap<MemberRef, String>>();
 
             let mut should_error = false;
 
             // ensure sitemap is good
-            for work in &works {
-                for author in &work.authors {
+            for (_, work) in works.iter() {
+                for author in &work.matter.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: 作品 {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", work.title, author)
+                        error!("Sitemap: 作品 {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", work.matter.title, author)
                     }
                 }
             }
 
-            for album in &albums {
-                for author in &album.authors {
+            for (_, album) in albums.iter() {
+                for author in &album.matter.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: アルバム {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, author)
+                        error!("Sitemap: アルバム {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, author)
                     }
                 }
 
-                for song in &album.tracks {
+                for song in &album.matter.tracks {
                     if song.external {
                         continue;
                     }
@@ -263,72 +199,47 @@ pub fn buildsite(
                     for song_author in &song.authors {
                         if !members.contains_key(song_author) {
                             should_error = true;
-                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, song.title, song_author)
+                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, song.title, song_author)
                         }
                     }
 
-                    for illust in &album.illustrations {
+                    for illust in &album.matter.illustrations {
                         for illustrator in &illust.illustrators {
                             if !members.contains_key(illustrator) {
                                 should_error = true;
-                                error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.title, illust.image, illustrator)
+                                error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, illust.image, illustrator)
                             }
                         }
                     }
                 }
             }
 
-            for post in &news {
-                if let Some(author) = &post.author {
+            for (_, post) in news.iter() {
+                if let Some(author) = &post.matter.author {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: ニュース {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", post.title, author)
+                        error!("Sitemap: ニュース {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", post.matter.title, author)
                     }
                 }
             }
 
-            // ensure member works are valid
-            // for member in members.values() {
-            //     for featured_work in &member.featured_works {
-            //         match featured_work {
-            //             WorkTitleOrSource::Source(url) => {
-            //                 let found = works.iter().find(|meta| &meta.source == url).is_some();
-            //                 if !found {
-            //                     should_error = true;
-            //                     error!("Sitemap: Member: Featured Work: {}のメンバーページで注目作品(URL {})を見つけませんでした。", member.ascii_name, url);
-            //                 }
-            //             },
-            //             WorkTitleOrSource::Title(title) => {
-            //                 let found = works.iter().find(|meta| &meta.title == title).is_some();
-            //                 if !found {
-            //                     should_error = true;
-            //                     error!("Sitemap: Member: Featured Work: {}のメンバーページで注目作品(作名 {})を見つけませんでした。", member.ascii_name, title);
-            //                 }
-            //             },
-            //         }
-            //     }
-            // }
             if should_error {
-                return Err(Error::msg("Errors occured during sitemap construction."))
+                return Err(Error::msg("Errors occured during namemap construction."))
             }
 
-
-            let site_map = SiteMap {
+            let namemap = NameMap {
                 members,
-                news,
-                works,
-                albums,
             };
-            Ok(site_map)
+            Ok(namemap)
         },
     );
 
     let _work_pages = config
         .task()
         .each(works)
-        .using((environment, sitemap, images, scripts, styles))
+        .using((environment, namemap, images, scripts, styles))
         .map(
-            |site_data, work, (environment, sitemap, image, scripts, styles)| {
+            |site_data, work, (environment, namemap, image, scripts, styles)| {
                 let major_context = MajorContext {
                     step: BuildSteps::Works,
                     file: Some(work.meta.path.clone()),
@@ -339,7 +250,7 @@ pub fn buildsite(
                     .map_err(|why| {
                         why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
                     })?;
-                let templated_html = work_detail(sitemap, &work.matter, rendered_markdown)
+                let templated_html = work_detail(namemap, &work.matter, rendered_markdown)
                     .map_err(|why| {
                         why.context(major_context.with_substep(SubBuildStep::Templating))
                     })?;
@@ -376,9 +287,9 @@ pub fn buildsite(
     let _album_pages = config
         .task()
         .each(albums)
-        .using((environment, sitemap, images, scripts, styles))
+        .using((environment, namemap, images, scripts, styles))
         .map(
-            |site_data, album, (environment, sitemap, image, scripts, styles)| {
+            |site_data, album, (environment, namemap, image, scripts, styles)| {
                 let major_context = MajorContext {
                     step: BuildSteps::Albums,
                     file: Some(album.meta.path.clone()),
@@ -389,7 +300,7 @@ pub fn buildsite(
                     .map_err(|why| {
                     why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
                 })?;
-                let templated_html = album_detail(sitemap, &album.matter, rendered_markdown)
+                let templated_html = album_detail(namemap, &album.matter, rendered_markdown)
                     .map_err(|why| {
                         why.context(major_context.with_substep(SubBuildStep::Templating))
                     })?;
@@ -417,7 +328,7 @@ pub fn buildsite(
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
                 Ok(Output::html(
-                    format!("/albums/releases/{path}/index.html"),
+                    format!("/works/albums/{path}/index.html"),
                     html_fixup,
                 ))
             },
@@ -426,9 +337,9 @@ pub fn buildsite(
     let _news_pages = config
         .task()
         .each(news)
-        .using((environment, sitemap, images, scripts, styles))
+        .using((environment, namemap, images, scripts, styles))
         .map(
-            |site_data, news, (environment, sitemap, image, scripts, styles)| {
+            |site_data, news, (environment, namemap, image, scripts, styles)| {
                 let major_context = MajorContext {
                     step: BuildSteps::News,
                     file: Some(news.meta.path.clone()),
@@ -439,7 +350,7 @@ pub fn buildsite(
                     .map_err(|why| {
                         why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
                     })?;
-                let templated_html = news_detail(sitemap, &news.matter, rendered_markdown)
+                let templated_html = news_detail(namemap, &news.matter, rendered_markdown)
                     .map_err(|why| {
                         why.context(major_context.with_substep(SubBuildStep::Templating))
                     })?;
@@ -478,9 +389,20 @@ pub fn buildsite(
     let _member_pages = config
         .task()
         .each(members)
-        .using((environment, sitemap, images, scripts, styles))
+        .using((
+            environment,
+            namemap,
+            works,
+            albums,
+            news,
+            images,
+            scripts,
+            styles,
+        ))
         .map(
-            |site_data, members, (environment, sitemap, image, scripts, styles)| {
+            |site_data,
+             members,
+             (environment, namemap, works, albums, newsposts, image, scripts, styles)| {
                 let major_context = MajorContext {
                     step: BuildSteps::Members,
                     file: Some(members.meta.path.clone()),
@@ -492,10 +414,15 @@ pub fn buildsite(
                             why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
                         },
                     )?;
-                let templated_html = member_detail(sitemap, &members.matter, rendered_markdown)
-                    .map_err(|why| {
-                        why.context(major_context.with_substep(SubBuildStep::Templating))
-                    })?;
+                let templated_html = member_detail(
+                    &members.matter,
+                    namemap,
+                    works,
+                    albums,
+                    newsposts,
+                    rendered_markdown,
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Templating)))?;
                 let full_html = base(&members.matter, templated_html, &[], &[]).map_err(|why| {
                     why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
                 })?;
@@ -523,14 +450,14 @@ pub fn buildsite(
     let _member_index_page = config
         .task()
         .name("Member Index Page")
-        .using((sitemap, images, scripts, styles))
-        .merge(|site_data, (sitemap, images, scripts, styles)| {
+        .using((members, images, scripts, styles))
+        .merge(|site_data, (members, images, scripts, styles)| {
             let major_context = MajorContext {
                 step: BuildSteps::MemberIndex,
                 file: None,
                 build_id: site_data.env.data.build_id,
             };
-            let member_index = member_index(sitemap).map_err(|why| {
+            let member_index = member_index(members).map_err(|why| {
                 why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
             })?;
 
@@ -555,6 +482,80 @@ pub fn buildsite(
             .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
             Ok(Output::html("/members/index.html", html_fixup))
+        });
+
+    let _works_album_index = config
+        .task()
+        .name("Work Album Index Page")
+        .using((members, images, scripts, styles))
+        .merge(|site_data, (members, images, scripts, styles)| {
+            let major_context = MajorContext {
+                step: BuildSteps::WorksAlbumIndex,
+                file: None,
+                build_id: site_data.env.data.build_id,
+            };
+            let member_index = member_index(members).map_err(|why| {
+                why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+            })?;
+
+            let member_index_metadata = GenericMeta {
+                path: "/works/index.html",
+                section: Sections::Members,
+                title: "作品目録",
+            };
+
+            let full_html = base(&member_index_metadata, member_index, &[], &[])?;
+            let trackers = TrackerSet {
+                images,
+                scripts,
+                styles,
+            };
+
+            let html_fixup = fixup_html(
+                site_data.env.data.build_id,
+                trackers,
+                full_html.into_string(),
+            )
+            .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+            Ok(Output::html("/works/index.html", html_fixup))
+        });
+
+    let _news_index = config
+        .task()
+        .name("News Index Page")
+        .using((members, images, scripts, styles))
+        .merge(|site_data, (members, images, scripts, styles)| {
+            let major_context = MajorContext {
+                step: BuildSteps::NewsIndex,
+                file: None,
+                build_id: site_data.env.data.build_id,
+            };
+            let member_index = member_index(members).map_err(|why| {
+                why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+            })?;
+
+            let member_index_metadata = GenericMeta {
+                path: "/news/index.html",
+                section: Sections::Members,
+                title: "ニュース目録",
+            };
+
+            let full_html = base(&member_index_metadata, member_index, &[], &[])?;
+            let trackers = TrackerSet {
+                images,
+                scripts,
+                styles,
+            };
+
+            let html_fixup = fixup_html(
+                site_data.env.data.build_id,
+                trackers,
+                full_html.into_string(),
+            )
+            .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+
+            Ok(Output::html("/news/index.html", html_fixup))
         });
 
     // begin static construction

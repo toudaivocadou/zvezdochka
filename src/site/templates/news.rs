@@ -1,15 +1,18 @@
-use crate::site::sitemap::SiteMap;
+use crate::site::namemap::NameMap;
 use crate::site::templates::functions::sns::sns_icon;
 use crate::site::util::image_or_gray;
 use crate::site::{news::NewsMeta, util::reference};
 use anyhow::Error;
+use hauchiwa::Tracker;
+use hauchiwa::loader::Document;
 use maud::{Markup, PreEscaped, html};
 
 pub const NEWS_MISSING_AUTHOR: &'static str = "東大ボカロP同好会";
 
-pub fn news_index(site_map: &SiteMap) -> Result<Markup, Error> {
-    // TODO: pagination. this will get long! yell at peng if we get >100!
-
+pub fn news_index(
+    names: &NameMap,
+    news_posts: &Tracker<'_, Document<NewsMeta>>,
+) -> Result<Markup, Error> {
     Ok(html! {
         section #hero {
             .container {
@@ -20,15 +23,8 @@ pub fn news_index(site_map: &SiteMap) -> Result<Markup, Error> {
 
         section #list {
             .listcontainer .flex-container style="align-items: center;"{
-                @for news_posts in &site_map.news {
-                    (news_card(site_map, news_posts)?)
-                }
-                @if site_map.news.is_empty() {
-                    p .work-description style="text-align: center;" {
-                        i {
-                            "ニュースがありません。"
-                        }
-                    }
+                @for (_, news_posts) in news_posts {
+                    (news_card(names, &news_posts.matter)?)
                 }
             }
         }
@@ -47,7 +43,7 @@ pub fn news_index(site_map: &SiteMap) -> Result<Markup, Error> {
     // base(sack, &metadata, Some(&[]), inner)
 }
 
-fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
+fn news_card(names: &NameMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
@@ -63,7 +59,7 @@ fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> 
                     (news_meta.date)
                 }
                 @if let Some(ascii_author) = &news_meta.author {
-                    a href=(format!("/members/{}/index.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
+                    a href=(format!("/members/{}/index.html", ascii_author)) { p { (names.members.get(ascii_author).unwrap()) } }
                 } @else {
                     p { "東大ボカロP同好会" }
                 }
@@ -84,7 +80,7 @@ fn news_card(site_map: &SiteMap, news_meta: &NewsMeta) -> Result<Markup, Error> 
 }
 
 pub fn news_detail(
-    site_map: &SiteMap,
+    site_map: &NameMap,
     news_meta: &NewsMeta,
     content: String,
 ) -> Result<Markup, Error> {
@@ -121,22 +117,10 @@ pub fn news_detail(
             }
 
             .back-button{
-                a href="../news.html" {
+                a href="../news/index.html" {
                     "ニュース目録一覧に戻る"
                 }
             }
         }
     })
-
-    // let metadata = Metadata {
-    //     page_title: post_meta.title.clone(),
-    //     page_image: Some(news_thumbnail(sack, post_meta)?),
-    //     canonical_link: format!("/news/{}.html", news_reference(post_meta)),
-    //     section: Sections::NewsPost,
-    //     description: Some(shorten(content)),
-    //     author: post_meta.author.clone(),
-    //     date: Some(post_meta.date.to_string()),
-    // };
-
-    // base(sack, &metadata, Some(&[]), inner)
 }

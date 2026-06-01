@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::site::{
-    metadata::RenderableMetadata, sitemap::MemberRef, templates::partials::navbar::Sections,
+    metadata::RenderableMetadata, namemap::MemberRef, templates::partials::navbar::Sections,
     util::format_date,
 };
 use maud::{Markup, Render, html};
@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 use time::Date;
 use url::Url;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum AlbumType {
-    ToudaiVocadou,
-    Solo,
-    Collaboration,
-}
+// #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+// pub enum AlbumType {
+//     ToudaiVocadou,
+//     Solo,
+//     Collaboration,
+// }
 
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Illustration {

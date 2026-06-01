@@ -1,17 +1,18 @@
 use anyhow::Error;
+use hauchiwa::{Tracker, loader::Document};
 use maud::{Markup, PreEscaped, html};
 
 use crate::site::{
     album::AlbumMeta,
     member::MemberMeta,
+    namemap::NameMap,
     news::NewsMeta,
-    sitemap::SiteMap,
     templates::{functions::sns::sns_icon, news::NEWS_MISSING_AUTHOR},
     util::{author_list, image_or_gray, reference},
     work::WorkMeta,
 };
 
-pub fn member_index(site_map: &SiteMap) -> Result<Markup, Error> {
+pub fn member_index(members: Tracker<'_, Document<MemberMeta>>) -> Result<Markup, Error> {
     Ok(html! {
         section #members-hero {
             .container {
@@ -23,8 +24,8 @@ pub fn member_index(site_map: &SiteMap) -> Result<Markup, Error> {
         section #staff-members {
             .zcontainer {
                 .member-grid {
-                    @for member in site_map.members.values() {
-                        (member_card(member)?)
+                    @for (_, member) in members {
+                        (member_card(&member.matter)?)
                     }
                 }
             }
@@ -68,30 +69,33 @@ fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
 
 // TODO: add "worked on albums" and "posts".
 pub fn member_detail(
-    site_map: &SiteMap,
     member: &MemberMeta,
+    names: &NameMap,
+    all_works: Tracker<'_, Document<WorkMeta>>,
+    all_albums: Tracker<'_, Document<AlbumMeta>>,
+    all_news: Tracker<'_, Document<NewsMeta>>,
     content: String,
 ) -> Result<Markup, Error> {
-    let recent_works = site_map
-        .works
+    let recent_works = all_works
         .iter()
+        .map(|(_, meta)| &meta.matter)
         .filter(|featured| featured.authors.contains(&member.ascii_name))
         .take(5)
-        .collect::<Vec<&WorkMeta>>();
+        .collect::<Vec<_>>();
 
-    let recent_news = site_map
-        .news
+    let recent_news = all_news
         .iter()
+        .map(|(_, meta)| &meta.matter)
         .filter(|post| post.author.as_ref() == Some(&member.ascii_name))
         .take(5)
-        .collect::<Vec<&NewsMeta>>();
+        .collect::<Vec<_>>();
 
-    let recent_albums = site_map
-        .albums
+    let recent_albums = all_albums
         .iter()
+        .map(|(_, meta)| &meta.matter)
         .filter(|album| album.authors.contains(&member.ascii_name))
         .take(5)
-        .collect::<Vec<&AlbumMeta>>();
+        .collect::<Vec<_>>();
 
     Ok(html! {
         section #member-detail {
@@ -121,15 +125,8 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿作品" }
                     .container {
-                        @for featured in &recent_works {
+                        @for featured in recent_works {
                             (featured_work_detail(featured))
-                        }
-                        @if recent_works.is_empty() {
-                            p .work-description style="text-align: center;" {
-                                em {
-                                    "代表作品がありません。"
-                                }
-                            }
                         }
                     }
                 }
@@ -137,15 +134,8 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿ニュース" }
                     .container {
-                        @for news in recent_news.iter() {
+                        @for news in recent_news {
                             (featured_post_detail(news)?)
-                        }
-                        @if recent_news.is_empty() {
-                            p .work-description style="text-align: center;" {
-                                em {
-                                    "ポストがありません。"
-                                }
-                            }
                         }
                     }
                 }
@@ -153,15 +143,8 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿アルバム" }
                     .container {
-                        @for featured in recent_albums.iter() {
-                            (featured_album_detail(site_map, featured)?)
-                        }
-                        @if recent_albums.is_empty() {
-                            p .work-description style="text-align: center;" {
-                                em {
-                                    "アルバムがありません。"
-                                }
-                            }
+                        @for featured in recent_albums {
+                            (featured_album_detail(names, featured)?)
                         }
                     }
                 }
@@ -236,7 +219,7 @@ fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
     })
 }
 
-fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
+fn featured_album_detail(name_map: &NameMap, album_meta: &AlbumMeta) -> Result<Markup, Error> {
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
@@ -252,7 +235,7 @@ fn featured_album_detail(sitemap: &SiteMap, album_meta: &AlbumMeta) -> Result<Ma
                     (album_meta.date)
                 }
                 p .member-role {
-                    (author_list(sitemap, &album_meta.authors, &album_meta.additional_authors))
+                    (author_list(name_map, &album_meta.authors, &album_meta.additional_authors))
                 }
             }
         }

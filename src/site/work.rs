@@ -4,7 +4,7 @@ use time::Date;
 use url::Url;
 
 use crate::site::{
-    album::Illustration, metadata::RenderableMetadata, sitemap::MemberRef,
+    album::Illustration, metadata::RenderableMetadata, namemap::MemberRef,
     templates::partials::navbar::Sections, util::format_date,
 };
 

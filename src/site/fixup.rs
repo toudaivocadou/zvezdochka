@@ -27,7 +27,7 @@ pub fn fixup_html(
                 }
                 let new_src = fixup_image(&trackers.images, Cow::Borrowed(current_src.as_str()))
                     .map_err(|why| Into::<Error>::into(why))?;
-                el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref());
+                el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref())?;
                 Ok(())
             }),
             element!("script[src]", |el| {
@@ -37,7 +37,7 @@ pub fn fixup_html(
                 }
                 let new_src = fixup_scripts(&trackers.scripts, Cow::Borrowed(current_src.as_str()))
                     .map_err(|why| Into::<Error>::into(why))?;
-                el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref());
+                el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref())?;
                 Ok(())
             }),
             element!("link[href]", |el| {
@@ -63,7 +63,7 @@ pub fn fixup_html(
                     }
                 };
 
-                el.set_attribute("href", fixup_abs_link(build_id, new_href).as_ref());
+                el.set_attribute("href", fixup_abs_link(build_id, new_href).as_ref())?;
                 Ok(())
             }),
             element!("meta[property^=\"og:\"]", |el| {
@@ -84,7 +84,7 @@ pub fn fixup_html(
                     }
                 };
 
-                el.set_attribute("content", fixup_abs_link(build_id, new_content).as_ref());
+                el.set_attribute("content", fixup_abs_link(build_id, new_content).as_ref())?;
                 Ok(())
             }),
             element!("a[href]", |el| {
@@ -98,7 +98,7 @@ pub fn fixup_html(
                 } else {
                     fixup_abs_link(build_id, current_href)
                 };
-                el.set_attribute("href", new_href.as_ref());
+                el.set_attribute("href", new_href.as_ref())?;
                 Ok(())
             }),
         ],

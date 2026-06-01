@@ -4,12 +4,12 @@ use url::Url;
 
 use crate::site::{metadata::RenderableMetadata, templates::partials::navbar::Sections};
 
-#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum WorkTitleOrSource {
-    Source(Url),
-    Title(String),
-}
+// #[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
+// #[serde(untagged)]
+// pub enum WorkTitleOrSource {
+//     Source(Url),
+//     Title(String),
+// }
 
 #[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
 pub struct MemberMeta {

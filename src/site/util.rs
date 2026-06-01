@@ -1,5 +1,5 @@
 use crate::site::metadata::RenderableMetadata;
-use crate::site::sitemap::SiteMap;
+use crate::site::namemap::NameMap;
 use anyhow::Error;
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
@@ -13,11 +13,10 @@ use std::fmt::Display;
 use std::hash::Hasher;
 use time::Date;
 use time::macros::format_description;
-use url::Url;
 
-pub fn shorten(content: &str) -> String {
-    content.chars().take(150).collect::<String>()
-}
+// pub fn shorten(content: &str) -> String {
+//     content.chars().take(150).collect::<String>()
+// }
 
 pub fn render_markdown(
     environment: &Environment,
@@ -38,67 +37,67 @@ pub fn render_markdown(
     Ok(output_str_buf)
 }
 
-fn slash_guard(root: &str, thing: &str) -> String {
-    if root == "." {
-        return if thing.starts_with("/") {
-            format!("/{}", thing)
-        } else {
-            thing.to_string()
-        };
-    }
+// fn slash_guard(root: &str, thing: &str) -> String {
+//     if root == "." {
+//         return if thing.starts_with("/") {
+//             format!("/{}", thing)
+//         } else {
+//             thing.to_string()
+//         };
+//     }
 
-    if thing.starts_with("/") {
-        format!("{root}{}", thing)
-    } else {
-        format!("{root}/{}", thing)
-    }
-}
+//     if thing.starts_with("/") {
+//         format!("{root}{}", thing)
+//     } else {
+//         format!("{root}/{}", thing)
+//     }
+// }
 
-pub fn rewrite_link(site_url: &str, link: String) -> Result<String, Error> {
-    if link.starts_with("..") || link.starts_with("#") || link.starts_with("https://") {
-        return Ok(link);
-    }
-    if let Ok(mut url) = Url::parse(&link) {
-        url.set_scheme("https")
-            .map_err(|_| Error::msg("failed to set URL scheme"))?;
-        return Ok(url.to_string());
-    }
-    // run our transformations
-    if link.starts_with("./") {
-        let striped = link.strip_prefix("./").unwrap();
-        let fixed = slash_guard(site_url, striped);
-        return Ok(fixed);
-    }
-    if link.starts_with(".") {
-        let striped = link.strip_prefix(".").unwrap();
-        let fixed = slash_guard(site_url, striped);
-        return Ok(fixed);
-    }
+// pub fn rewrite_link(site_url: &str, link: String) -> Result<String, Error> {
+//     if link.starts_with("..") || link.starts_with("#") || link.starts_with("https://") {
+//         return Ok(link);
+//     }
+//     if let Ok(mut url) = Url::parse(&link) {
+//         url.set_scheme("https")
+//             .map_err(|_| Error::msg("failed to set URL scheme"))?;
+//         return Ok(url.to_string());
+//     }
+//     // run our transformations
+//     if link.starts_with("./") {
+//         let striped = link.strip_prefix("./").unwrap();
+//         let fixed = slash_guard(site_url, striped);
+//         return Ok(fixed);
+//     }
+//     if link.starts_with(".") {
+//         let striped = link.strip_prefix(".").unwrap();
+//         let fixed = slash_guard(site_url, striped);
+//         return Ok(fixed);
+//     }
 
-    Ok(link)
-}
+//     Ok(link)
+// }
 
-pub fn make_path_relative(root: &str, path: impl AsRef<str>) -> String {
-    let path = path.as_ref();
-    if path.starts_with(root) {
-        return path.to_string();
-    }
-    if path.starts_with("/") {
-        return path.to_string();
-    }
-    return format!("{root}/{path}");
-}
+// pub fn make_path_relative(root: &str, path: impl AsRef<str>) -> String {
+//     let path = path.as_ref();
+//     if path.starts_with(root) {
+//         return path.to_string();
+//     }
+//     if path.starts_with("/") {
+//         return path.to_string();
+//     }
+//     return format!("{root}/{path}");
+// }
 
 pub fn format_date(date: Date) -> String {
     let format = format_description!("[year]-[month]-[day]");
     date.format(format).unwrap()
 }
 
-pub fn hash<T: std::hash::Hash>(item: &T) -> u64 {
-    let mut seahasher = SeaHasher::default();
-    item.hash(&mut seahasher);
-    seahasher.finish()
-}
+// pub fn hash<T: std::hash::Hash>(item: &T) -> u64 {
+//     let mut seahasher = SeaHasher::default();
+//     item.hash(&mut seahasher);
+//     seahasher.finish()
+// }
 
 pub fn image_or_gray(image_path: Option<&String>) -> &str {
     match image_path {
@@ -150,7 +149,7 @@ where
     }
 }
 
-pub fn author_list<S>(sitemap: &SiteMap, known_authors: &[S], unknown_authors: &[S]) -> Markup
+pub fn author_list<S>(names: &NameMap, known_authors: &[S], unknown_authors: &[S]) -> Markup
 where
     S: AsRef<str>,
 {
@@ -167,9 +166,9 @@ where
     let known_authors_rendered = known_authors.iter().map(|author| {
         let author = author.as_ref(); // type system magic :D
         // PANIC: This cannot panic because by the time we are here we already checked every meta.
-        let member_meta = sitemap.members.get(author).unwrap();
+        let member_name = names.members.get(author).unwrap();
         html! {
-            a .member-role .member-bio href = (format!("/members/{}.html", member_meta.name)) {
+            a .member-role .member-bio href = (format!("/members/{}.html", member_name)) {
                 (author)
             };
         }
@@ -200,7 +199,6 @@ where
 
 #[derive(Copy, Clone, Debug)]
 pub enum BuildSteps {
-    SiteMap,
     Members,
     Works,
     Albums,
@@ -218,7 +216,6 @@ pub enum SubBuildStep {
     Templating,
     BaseHTMLFilling,
     Fixup,
-    Other(&'static str),
 }
 
 #[derive(Clone, Debug)]
@@ -232,15 +229,6 @@ impl MajorContext {
     pub fn with_substep(&self, substep: SubBuildStep) -> ErrorCtx {
         ErrorCtx {
             substep,
-            step: self.step,
-            file: self.file.clone(),
-            build_id: self.build_id,
-        }
-    }
-
-    pub fn with_str(&self, error: &'static str) -> ErrorCtx {
-        ErrorCtx {
-            substep: SubBuildStep::Other(error),
             step: self.step,
             file: self.file.clone(),
             build_id: self.build_id,
