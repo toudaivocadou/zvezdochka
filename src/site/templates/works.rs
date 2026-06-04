@@ -188,27 +188,25 @@ pub fn album_detail(
                 section #tracklist {
                     h2 { "トラックリスト" }
                     dl .tracklist-list  {
-                        @for (number, track) in album_meta.tracks.iter().enumerate() {
+                        @for (number, (title, track)) in album_meta.tracks.iter().enumerate() {
                             .tracklist-track {
                                 dt .track-title {
                                     h2 {
                                         (number + 1) ". "
                                         @if !track.external {
-                                            a href=(reference(&track.title, &track.authors, &track.additional_authors)) {
-                                                (track.title)
+                                            a href=(reference(title, &track.authors, &track.additional_authors)) {
+                                                (title)
                                             }
                                         } @else {
-                                            (track.title)
+                                            (title)
                                         }
                                     }
                                 }
                                 dd .track-author {
                                     (author_list(sitemap, &track.authors, &track.additional_authors))
                                 }
-                                @if let Some(duration) = track.duration {
-                                    dd .track-length {
-                                        (duration)
-                                    }
+                                dd .track-length {
+                                    (track.duration.format())
                                 }
                             }
                         }
@@ -255,11 +253,11 @@ pub fn album_detail(
                             }
                             p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                         }
-                        @for illustration in &album_meta.illustrations {
-                            .work-item-detail #(format!("illustration-{}", illustration.title)) {
-                                h4 { (illustration.title) }
+                        @for (title, illustration) in &album_meta.illustrations {
+                            .work-item-detail #(format!("illustration-{}", title)) {
+                                h4 { (title) }
                                 .work-illustration-container {
-                                    img .img-placeholder src=(illustration.image) alt=(illustration.title);
+                                    img .img-placeholder src=(illustration.image) alt=(title);
                                 }
                                 p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                             }

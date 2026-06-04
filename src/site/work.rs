@@ -1,5 +1,7 @@
+use fancy_duration::FancyDuration;
 use maud::{Render, html};
 use serde::{Deserialize, Serialize};
+use std::{hash::Hash, time::Duration};
 use time::Date;
 use url::Url;
 
@@ -8,7 +10,7 @@ use crate::site::{
     templates::partials::navbar::Sections, util::format_date,
 };
 
-#[derive(Clone, Debug, Hash, PartialOrd, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WorkMeta {
     pub title: String,
     #[serde(default)]
@@ -16,6 +18,7 @@ pub struct WorkMeta {
     #[serde(default)]
     pub additional_authors: Vec<String>,
     pub date: Date,
+    pub length: FancyDuration<Duration>,
 
     #[serde(default)]
     pub short: Option<String>,
@@ -27,6 +30,20 @@ pub struct WorkMeta {
     pub source: Option<Url>,
     #[serde(default)]
     pub sns_links: Vec<Url>,
+}
+
+impl Hash for WorkMeta {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.title.hash(state);
+        self.authors.hash(state);
+        self.additional_authors.hash(state);
+        self.date.hash(state);
+        self.length.format().hash(state);
+        self.short.hash(state);
+        self.thumbnail.hash(state);
+        self.source.hash(state);
+        self.sns_links.hash(state);
+    }
 }
 
 impl RenderableMetadata for WorkMeta {

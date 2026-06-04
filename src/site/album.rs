@@ -1,11 +1,12 @@
-use std::fmt::Display;
-
 use crate::site::{
     metadata::RenderableMetadata, namemap::MemberRef, templates::partials::navbar::Sections,
     util::format_date,
 };
+use fancy_duration::FancyDuration;
+use indexmap::IndexMap;
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
+use std::{hash::Hash, time::Duration};
 use time::Date;
 use url::Url;
 
@@ -16,9 +17,10 @@ use url::Url;
 //     Collaboration,
 // }
 
+pub type Title = String;
+
 #[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Illustration {
-    pub title: String,
     pub image: String,
     #[serde(default)]
     pub illustrators: Vec<MemberRef>,
@@ -28,7 +30,7 @@ pub struct Illustration {
     pub description: Option<String>,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AlbumMeta {
     pub title: String,
     #[serde(default)]
@@ -49,10 +51,32 @@ pub struct AlbumMeta {
     pub thumbnail: Illustration,
 
     #[serde(default)]
-    pub illustrations: Vec<Illustration>,
+    pub illustrations: IndexMap<Title, Illustration>,
 
     #[serde(default)]
-    pub tracks: Vec<Track>,
+    pub tracks: IndexMap<Title, Track>,
+}
+
+impl Hash for AlbumMeta {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.title.hash(state);
+        self.authors.hash(state);
+        self.additional_authors.hash(state);
+        self.date.hash(state);
+        self.link.hash(state);
+        self.demonstration.hash(state);
+        self.sns_links.hash(state);
+        self.short.hash(state);
+        self.thumbnail.hash(state);
+        for (title, illust) in &self.illustrations {
+            title.hash(state);
+            illust.hash(state);
+        }
+        for (title, track) in &self.tracks {
+            title.hash(state);
+            track.hash(state);
+        }
+    }
 }
 
 impl RenderableMetadata for AlbumMeta {
@@ -91,27 +115,48 @@ impl Render for AlbumMeta {
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct SongLength {
-    pub minutes: u8,
-    pub seconds: u8,
-}
-
-impl Display for SongLength {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.minutes, self.seconds)
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Track {
-    pub title: String,
     #[serde(default)]
     pub authors: Vec<MemberRef>,
     #[serde(default)]
     pub additional_authors: Vec<String>,
-    #[serde(default)]
-    pub duration: Option<SongLength>,
+    pub duration: FancyDuration<Duration>,
     #[serde(default)]
     pub external: bool,
+}
+
+impl Hash for Track {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.authors.hash(state);
+        self.additional_authors.hash(state);
+        self.duration.format().hash(state);
+        self.external.hash(state);
+    }
+}
+
+impl PartialEq for Track {
+    fn eq(&self, other: &Self) -> bool {
+        self.authors == other.authors
+            && self.additional_authors == other.additional_authors
+            && self.duration == other.duration
+            && self.external == other.external
+    }
+}
+
+impl PartialOrd for Track {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.authors.partial_cmp(&other.authors) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self
+            .additional_authors
+            .partial_cmp(&other.additional_authors)
+        {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.external.partial_cmp(&other.external)
+    }
 }

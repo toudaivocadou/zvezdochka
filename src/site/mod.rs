@@ -191,7 +191,7 @@ pub fn buildsite(
                     }
                 }
 
-                for song in &album.matter.tracks {
+                for (title, song) in &album.matter.tracks {
                     if song.external {
                         continue;
                     }
@@ -199,16 +199,15 @@ pub fn buildsite(
                     for song_author in &song.authors {
                         if !members.contains_key(song_author) {
                             should_error = true;
-                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, song.title, song_author)
+                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, title, song_author)
                         }
                     }
-
-                    for illust in &album.matter.illustrations {
-                        for illustrator in &illust.illustrators {
-                            if !members.contains_key(illustrator) {
-                                should_error = true;
-                                error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, illust.image, illustrator)
-                            }
+                }
+                for (title, illust) in &album.matter.illustrations {
+                    for illustrator in &illust.illustrators {
+                        if !members.contains_key(illustrator) {
+                            should_error = true;
+                            error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", title, illust.image, illustrator)
                         }
                     }
                 }

@@ -223,7 +223,7 @@ fn featured_album_detail(name_map: &NameMap, album_meta: &AlbumMeta) -> Result<M
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .work-item-thumb src=(&album_meta.thumbnail.image) alt=(&album_meta.thumbnail.title) {}
+                img .work-item-thumb src=(&album_meta.thumbnail.image) alt="Thumbnail" {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
