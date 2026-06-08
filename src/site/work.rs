@@ -18,7 +18,7 @@ pub struct WorkMeta {
     #[serde(default)]
     pub additional_authors: Vec<String>,
     pub date: Date,
-    pub length: FancyDuration<Duration>,
+    pub duration: FancyDuration<Duration>,
 
     #[serde(default)]
     pub short: Option<String>,
@@ -38,7 +38,7 @@ impl Hash for WorkMeta {
         self.authors.hash(state);
         self.additional_authors.hash(state);
         self.date.hash(state);
-        self.length.format().hash(state);
+        self.duration.format().hash(state);
         self.short.hash(state);
         self.thumbnail.hash(state);
         self.source.hash(state);

@@ -144,7 +144,7 @@ pub fn buildsite(
 
     let members = config
         .load_documents::<MemberMeta>()
-        .glob(format!("{source_path}/works/[!_]*.md"))?
+        .glob(format!("{source_path}/members/[!_]*.md"))?
         .register();
 
     let works = config
@@ -154,12 +154,12 @@ pub fn buildsite(
 
     let albums = config
         .load_documents::<AlbumMeta>()
-        .glob(format!("{source_path}/works/[!_]*.md"))?
+        .glob(format!("{source_path}/albums/[!_]*.md"))?
         .register();
 
     let news = config
         .load_documents::<NewsMeta>()
-        .glob(format!("{source_path}/works/[!_]*.md"))?
+        .glob(format!("{source_path}/news/[!_]*.md"))?
         .register();
 
     // build SiteMap

@@ -15,5 +15,5 @@ fn main() {
         false,
         false,
     )
-    .unwrap();
+    .expect("Failed to build site.");
 }
