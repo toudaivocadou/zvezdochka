@@ -178,16 +178,29 @@ pub fn buildsite(
                 for author in &work.matter.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: 作品 {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", work.matter.title, author)
+                        error!("Sitemap: 作品`{}`で投稿者{}を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", work.matter.title, author)
                     }
                 }
+
+                // for album_title in work.matter {
+                //     let mut found_album = false;
+                //     for (_, album) in albums.iter() {
+                //         if album.matter.title == album_title {
+                //             found_album = true;
+                //         }
+                //     }
+                //     if !found_album {
+                //         should_error = true;
+                //         error!("Sitemap: 作品`{}`で`{}`というアルバムが見つかりませんでした。確認してください。", work.matter.title, album_title);
+                //     }
+                // }
             }
 
             for (_, album) in albums.iter() {
                 for author in &album.matter.authors {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: アルバム {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, author)
+                        error!("Sitemap: アルバム`{}`で投稿者{}を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", album.matter.title, author)
                     }
                 }
 
@@ -199,7 +212,7 @@ pub fn buildsite(
                     for song_author in &song.authors {
                         if !members.contains_key(song_author) {
                             should_error = true;
-                            error!("Sitemap: アルバム {}の曲{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", album.matter.title, title, song_author)
+                            error!("Sitemap: アルバム`{}`の曲`{}`投稿者`{}`を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", album.matter.title, title, song_author)
                         }
                     }
                 }
@@ -207,7 +220,7 @@ pub fn buildsite(
                     for illustrator in &illust.illustrators {
                         if !members.contains_key(illustrator) {
                             should_error = true;
-                            error!("Sitemap: アルバム {}のイラスト{}投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", title, illust.image, illustrator)
+                            error!("Sitemap: アルバム`{}`のイラスト{}投稿者`{}`を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", title, illust.image, illustrator)
                         }
                     }
                 }
@@ -217,7 +230,7 @@ pub fn buildsite(
                 if let Some(author) = &post.matter.author {
                     if !members.contains_key(author) {
                         should_error = true;
-                        error!("Sitemap: ニュース {}で投稿者{}を見つけませんでした。サイトで登録していない投稿者は additional_authors 欄に入力してください。", post.matter.title, author)
+                        error!("Sitemap: ニュース`{}`で投稿者`{}`を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", post.matter.title, author)
                     }
                 }
             }
@@ -236,32 +249,32 @@ pub fn buildsite(
     let _work_pages = config
         .task()
         .each(works)
-        .using((environment, namemap, images, scripts, styles))
+        .using((environment, namemap, images, scripts, styles, albums))
         .map(
-            |site_data, work, (environment, namemap, image, scripts, styles)| {
+            |site_data, work, (environment, namemap, image, scripts, styles, albums)| {
                 let major_context = MajorContext {
                     step: BuildSteps::Works,
                     file: Some(work.meta.path.clone()),
                     build_id: site_data.env.data.build_id,
                 };
 
-                let rendered_markdown = render_markdown(&environment, &work.matter, &work.text)
-                    .map_err(|why| {
-                        why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
-                    })?;
-                let templated_html = work_detail(namemap, &work.matter, rendered_markdown)
-                    .map_err(|why| {
-                        why.context(major_context.with_substep(SubBuildStep::Templating))
-                    })?;
-                let full_html = base(&work.matter, templated_html, &[], &[]).map_err(|why| {
-                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
-                })?;
-
                 let path = reference(
                     &work.matter.title,
                     &work.matter.authors,
                     &work.matter.additional_authors,
                 );
+
+                let rendered_markdown = render_markdown(&environment, &work.matter, &work.text)
+                    .map_err(|why| {
+                        why.context(major_context.with_substep(SubBuildStep::ParsingMarkdown))
+                    })?;
+                let templated_html =
+                    work_detail(namemap, &albums, &path, &work.matter, rendered_markdown).map_err(
+                        |why| why.context(major_context.with_substep(SubBuildStep::Templating)),
+                    )?;
+                let full_html = base(&work.matter, templated_html, &[], &[]).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
 
                 let trackers = TrackerSet {
                     images: image,
@@ -562,49 +575,14 @@ pub fn buildsite(
     let _join_page = config
         .task()
         .name("Join Page")
-        .using((images, scripts, styles))
-        .merge(|site_data, (images, scripts, styles)| {
+        .using((images, scripts, styles, works, namemap))
+        .merge(|site_data, (images, scripts, styles, works, namemap)| {
             let major_context = MajorContext {
                 step: BuildSteps::JoinPage,
                 file: None,
                 build_id: site_data.env.data.build_id,
             };
-            let page = join_vocadou();
-
-            let metadata = GenericMeta {
-                path: "/join.html",
-                section: Sections::Join,
-                title: "参加案内",
-            };
-
-            let full_html = base(&metadata, page, &[], &[])?;
-            let trackers = TrackerSet {
-                images,
-                scripts,
-                styles,
-            };
-
-            let html_fixup = fixup_html(
-                site_data.env.data.build_id,
-                trackers,
-                full_html.into_string(),
-            )
-            .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
-
-            Ok(Output::html(metadata.path, html_fixup))
-        });
-
-    let _join_page = config
-        .task()
-        .name("Join Page")
-        .using((images, scripts, styles))
-        .merge(|site_data, (images, scripts, styles)| {
-            let major_context = MajorContext {
-                step: BuildSteps::JoinPage,
-                file: None,
-                build_id: site_data.env.data.build_id,
-            };
-            let page = join_vocadou();
+            let page = join_vocadou(&namemap, &works);
 
             let metadata = GenericMeta {
                 path: "/join.html",

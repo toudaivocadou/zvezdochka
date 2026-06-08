@@ -15,6 +15,7 @@ pub enum SocialLinkType {
     Spotify,
     TikTok,
     Instagram,
+    Bandcamp,
     OtherUnknown(String),
 }
 
@@ -32,6 +33,7 @@ impl SocialLinkType {
             SocialLinkType::Spotify => "spotify.svg",
             SocialLinkType::TikTok => "tiktok.svg",
             SocialLinkType::Instagram => "instagram.svg",
+            SocialLinkType::Bandcamp => "bandcamp.svg",
             SocialLinkType::OtherUnknown(_) => "link.svg",
         }
     }
@@ -50,7 +52,13 @@ impl SocialLinkType {
             "spotify.com" => SocialLinkType::Spotify,
             "tiktok.com" => SocialLinkType::TikTok,
             "instagram.com" => SocialLinkType::Instagram,
-            other => SocialLinkType::OtherUnknown(other.to_string()),
+            other => {
+                if other.contains("bandcamp.com") {
+                    SocialLinkType::Bandcamp
+                } else {
+                    SocialLinkType::OtherUnknown(other.to_string())
+                }
+            }
         };
 
         Ok(url_type)

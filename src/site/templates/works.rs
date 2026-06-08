@@ -148,7 +148,7 @@ fn album_card(sitemap: &NameMap, album_meta: &AlbumMeta) -> Result<Markup, Error
 }
 
 pub fn album_detail(
-    sitemap: &NameMap,
+    namemap: &NameMap,
     album_meta: &AlbumMeta,
     content: String,
 ) -> Result<Markup, Error> {
@@ -165,7 +165,7 @@ pub fn album_detail(
                             p { (short) }
                         }
                         .work-contributors {
-                            "投稿者: " (author_list(sitemap, &album_meta.authors, &album_meta.additional_authors))
+                            "投稿者: " (author_list(namemap, &album_meta.authors, &album_meta.additional_authors))
                         }
                         p {
                             @if let Some(short) = &album_meta.short {
@@ -203,7 +203,7 @@ pub fn album_detail(
                                     }
                                 }
                                 dd .track-author {
-                                    (author_list(sitemap, &track.authors, &track.additional_authors))
+                                    (author_list(namemap, &track.authors, &track.additional_authors))
                                 }
                                 dd .track-length {
                                     (track.duration.format())
@@ -251,7 +251,7 @@ pub fn album_detail(
                             .work-illustration-container {
                                 img .work-item-thumb src=(album_meta.thumbnail.image) alt=(album_meta.title);
                             }
-                            p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
+                            p {"イラスト: " (author_list(namemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                         }
                         @for (title, illustration) in &album_meta.illustrations {
                             .work-item-detail #(format!("illustration-{}", title)) {
@@ -259,7 +259,7 @@ pub fn album_detail(
                                 .work-illustration-container {
                                     img .img-placeholder src=(illustration.image) alt=(title);
                                 }
-                                p {"イラスト: " (author_list(sitemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
+                                p {"イラスト: " (author_list(namemap, &album_meta.thumbnail.illustrators, &album_meta.thumbnail.additional_illustrators)) }
                             }
                         }
                     }
@@ -290,10 +290,27 @@ pub fn album_detail(
 }
 
 pub fn work_detail(
-    sitemap: &NameMap,
+    name_map: &NameMap,
+    albums: &Tracker<'_, Document<AlbumMeta>>,
+    this_reference: &str,
     work_meta: &WorkMeta,
     content: String,
 ) -> Result<Markup, Error> {
+    let containing_albums = albums
+        .into_iter()
+        .filter(|(_, album)| {
+            let mut contains = false;
+            for (title, track) in &album.matter.tracks {
+                let trackref = reference(title, &track.authors, &track.additional_authors);
+                if this_reference == trackref {
+                    contains = true;
+                }
+            }
+            contains
+        })
+        .map(|(_, m)| m)
+        .collect::<Vec<_>>();
+
     Ok(html! {
         section #work-section {
             .work-detail-container {
@@ -303,15 +320,10 @@ pub fn work_detail(
                     }
                     .work-info {
                         h2 { (work_meta.title) }
-                        // .work-featured-work {
-                        //     @if work_meta.featured {
-                        //         h5 { "⭐: このリリースはメンバーページでフィーチャーされています。" }
-                        //     }
-                        // }
                         .work-date {
                             p { (work_meta.date) }
                         }
-                        p { "投稿者: " (author_list(sitemap, &work_meta.authors, &work_meta.additional_authors)) }
+                        p { "投稿者: " (author_list(name_map, &work_meta.authors, &work_meta.additional_authors)) }
                         @if let Some(short) = &work_meta.short {
                             p .work-bio { (short) }
                         }
@@ -345,15 +357,31 @@ pub fn work_detail(
                 }
 
                 section #description .work-description {
-                    h2 { "作品説明" }
+                    h2 { "作品歌詞" }
 
                     @if content.is_empty() {
                         p .work-no-description {
-                            em { "説明がありません。" }
+                            em { "歌詞がありません。" }
                         }
                     } @else {
                         .description {
                             (PreEscaped(content))
+                        }
+                    }
+                }
+
+                section #description .work-description {
+                    h2 { "投稿アルバム" }
+
+                    @if containing_albums.is_empty() {
+                        p .work-no-description {
+                            em { "投稿がありません。" }
+                        }
+                    } @else {
+                        .description {
+                            @for album in containing_albums {
+                                (album_card(&name_map, &album.matter)?)
+                            }
                         }
                     }
                 }

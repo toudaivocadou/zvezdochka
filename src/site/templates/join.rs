@@ -1,6 +1,13 @@
-use maud::{Markup, html};
+use hauchiwa::{Tracker, loader::Document};
+use maud::{Markup, PreEscaped, html};
 
-pub fn join_vocadou() -> Markup {
+use crate::site::{
+    namemap::NameMap,
+    util::{author_list, reference},
+    work::WorkMeta,
+};
+
+pub fn join_vocadou(name_map: &NameMap, works: &Tracker<'_, Document<WorkMeta>>) -> Markup {
     // let meta = Metadata {
     //     page_title: "入会希望者へ - Joining Vocaloid Producer Club".to_string(),
     //     page_image: Some("circle-photo.jpg".to_string()),
@@ -10,7 +17,27 @@ pub fn join_vocadou() -> Markup {
     //     date: None,
     //     description: None,
     // };
-
+    let mut works = works.iter().map(|(_, m)| m).collect::<Vec<_>>();
+    works.sort_by(|a, b| {
+        a.matter
+            .date
+            .partial_cmp(&b.matter.date)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    works.reverse();
+    let works = works.into_iter().map(|document| {
+        html! {
+            .card {
+                .youtube-embed-container {}
+                a href=(format!("/works/releases/{}.html", reference(&document.matter.title, &document.matter.authors, &document.matter.additional_authors ))) {
+                    h6 {
+                        (document.matter.title)
+                    }
+                }
+                p { "投稿者: " (author_list(&name_map, &document.matter.authors, &document.matter.additional_authors)) }
+            }
+        }
+    }).collect::<Vec<PreEscaped<String>>>();
     html! {
         section #hero {
             .container {
@@ -20,15 +47,21 @@ pub fn join_vocadou() -> Markup {
             }
         }
 
-
             section .flex-container {
                 h2 { "メンバー作品" }
                 #infinite-slider .carousel {
-                    #visible-slider-group .group {}
-                    #hidden-slider-group aria-hidden .group {}
+                    #visible-slider-group .group {
+                        @for work in &works {
+                            (work)
+                        }
+                    }
+                    #hidden-slider-group aria-hidden .group {
+                        @for work in &works {
+                            (work)
+                        }
+                    }
                 }
             }
-
 
         section #join {
             .container {
