@@ -11,9 +11,9 @@ use crate::site::templates::functions::sns::jinja_sns_icon;
 use crate::site::templates::index::index;
 use crate::site::templates::join::join_vocadou;
 use crate::site::templates::members::{member_detail, member_index};
-use crate::site::templates::news::{NEWS_MISSING_AUTHOR, news_detail};
+use crate::site::templates::news::{NEWS_MISSING_AUTHOR, news_detail, news_index};
 use crate::site::templates::partials::navbar::Sections;
-use crate::site::templates::works::{album_detail, work_detail};
+use crate::site::templates::works::{album_detail, work_album_index, work_detail};
 use crate::site::util::{BuildSteps, MajorContext, SubBuildStep, reference, render_markdown};
 use crate::site::work::WorkMeta;
 use anyhow::Error;
@@ -506,62 +506,64 @@ pub fn buildsite(
     let _works_album_index = config
         .task()
         .name("Work Album Index Page")
-        .using((members, images, scripts, styles))
-        .merge(|site_data, (members, images, scripts, styles)| {
-            let major_context = MajorContext {
-                step: BuildSteps::WorksAlbumIndex,
-                file: None,
-                build_id: site_data.env.data.build_id,
-            };
-            let member_index = member_index(members).map_err(|why| {
-                why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
-            })?;
+        .using((namemap, works, albums, images, scripts, styles))
+        .merge(
+            |site_data, (namemap, works, albums, images, scripts, styles)| {
+                let major_context = MajorContext {
+                    step: BuildSteps::WorksAlbumIndex,
+                    file: None,
+                    build_id: site_data.env.data.build_id,
+                };
+                let member_index = work_album_index(namemap, &works, &albums).map_err(|why| {
+                    why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
+                })?;
 
-            let member_index_metadata = GenericMeta {
-                path: "/works/index.html",
-                section: Sections::Members,
-                title: "作品目録",
-            };
+                let work_album_generic_meta = GenericMeta {
+                    path: "/works/index.html",
+                    section: Sections::Works,
+                    title: "作品目録",
+                };
 
-            let full_html = base(&member_index_metadata, member_index, &[], &[])?;
-            let trackers = TrackerSet {
-                images,
-                scripts,
-                styles,
-            };
+                let full_html = base(&work_album_generic_meta, member_index, &[], &[])?;
+                let trackers = TrackerSet {
+                    images,
+                    scripts,
+                    styles,
+                };
 
-            let html_fixup = fixup_html(
-                &site_data.env.data.source_path,
-                site_data.env.data.build_id,
-                trackers,
-                full_html.into_string(),
-            )
-            .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
+                let html_fixup = fixup_html(
+                    &site_data.env.data.source_path,
+                    site_data.env.data.build_id,
+                    trackers,
+                    full_html.into_string(),
+                )
+                .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
-            Ok(Output::html("works/index.html", html_fixup))
-        });
+                Ok(Output::html("works/index.html", html_fixup))
+            },
+        );
 
     let _news_index = config
         .task()
         .name("News Index Page")
-        .using((members, images, scripts, styles))
-        .merge(|site_data, (members, images, scripts, styles)| {
+        .using((namemap, news, images, scripts, styles))
+        .merge(|site_data, (namemap, news, images, scripts, styles)| {
             let major_context = MajorContext {
                 step: BuildSteps::NewsIndex,
                 file: None,
                 build_id: site_data.env.data.build_id,
             };
-            let member_index = member_index(members).map_err(|why| {
+            let news_index = news_index(namemap, &news).map_err(|why| {
                 why.context(major_context.with_substep(SubBuildStep::BaseHTMLFilling))
             })?;
 
-            let member_index_metadata = GenericMeta {
+            let news_index_generic_meta = GenericMeta {
                 path: "/news/index.html",
-                section: Sections::Members,
+                section: Sections::News,
                 title: "ニュース目録",
             };
 
-            let full_html = base(&member_index_metadata, member_index, &[], &[])?;
+            let full_html = base(&news_index_generic_meta, news_index, &[], &[])?;
             let trackers = TrackerSet {
                 images,
                 scripts,
@@ -671,7 +673,7 @@ pub fn buildsite(
     let end_time = Instant::now();
     let build_time = end_time.duration_since(start_time);
     info!(
-        "Site build {:?} complete. Took {} seconds.",
+        "Site build (id: {:?}) complete. Took {} seconds.",
         build_id,
         build_time.as_secs_f32()
     );

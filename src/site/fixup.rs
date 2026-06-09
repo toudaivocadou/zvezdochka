@@ -162,7 +162,7 @@ fn fixup_styles<'a>(
     styles: &Tracker<Stylesheet>,
     destination: Cow<'a, str>,
 ) -> Result<Cow<'a, str>, Error> {
-    if !destination.ends_with(".css") || destination.starts_with("/pagefind") {
+    if !destination.ends_with(".css") || destination.starts_with("/_pagefind") {
         return Ok(destination);
     }
     let intermediary = prefixing_it_up("styles", destination);
@@ -178,7 +178,7 @@ fn fixup_scripts<'a>(
     scripts: &Tracker<Script>,
     destination: Cow<'a, str>,
 ) -> Result<Cow<'a, str>, Error> {
-    if !destination.ends_with(".js") || destination.starts_with("/pagefind") {
+    if !destination.ends_with(".js") || destination.starts_with("/_pagefind") {
         return Ok(destination);
     }
 

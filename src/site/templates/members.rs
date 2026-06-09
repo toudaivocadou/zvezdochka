@@ -102,7 +102,7 @@ pub fn member_detail(
             .member-detail-container {
                 .member-profile {
                     .member-profile-image {
-                        img .img-placeholder src=(format!("icon/{}.jpg", member.name)) alt=(member.name);
+                        img .img-placeholder src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
                     }
                     .member-profile-info {
                         h2 { (member.name) }

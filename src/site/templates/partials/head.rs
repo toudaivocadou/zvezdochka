@@ -19,9 +19,6 @@ pub fn html_head(
             }
             link rel="stylesheet" href="styles/style.css";
             link rel="icon" type="image/x-icon" href="/favicon.ico";
-            // pagefind
-            link rel="stylesheet" href="/pagefind/pagefind-component-ui.css";
-            script src="/pagefind/pagefind-component-ui.js" type="module";
         }
     }
 }
