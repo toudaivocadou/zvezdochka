@@ -14,6 +14,7 @@ pub struct TrackerSet<'a> {
 }
 
 pub fn fixup_html(
+    site_path_prefix: &str,
     build_id: Option<u64>,
     trackers: TrackerSet,
     html: String,
@@ -25,8 +26,12 @@ pub fn fixup_html(
                 if current_src.starts_with("http://") || current_src.starts_with("https://") {
                     return Ok(());
                 }
-                let new_src = fixup_image(&trackers.images, Cow::Borrowed(current_src.as_str()))
-                    .map_err(|why| Into::<Error>::into(why))?;
+                let new_src = fixup_image(
+                    site_path_prefix,
+                    &trackers.images,
+                    Cow::Borrowed(current_src.as_str()),
+                )
+                .map_err(|why| Into::<Error>::into(why))?;
                 el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref())?;
                 Ok(())
             }),
@@ -35,8 +40,12 @@ pub fn fixup_html(
                 if current_src.starts_with("http://") || current_src.starts_with("https://") {
                     return Ok(());
                 }
-                let new_src = fixup_scripts(&trackers.scripts, Cow::Borrowed(current_src.as_str()))
-                    .map_err(|why| Into::<Error>::into(why))?;
+                let new_src = fixup_scripts(
+                    site_path_prefix,
+                    &trackers.scripts,
+                    Cow::Borrowed(current_src.as_str()),
+                )
+                .map_err(|why| Into::<Error>::into(why))?;
                 el.set_attribute("src", fixup_abs_link(build_id, new_src).as_ref())?;
                 Ok(())
             }),
@@ -54,9 +63,9 @@ pub fn fixup_html(
                 let cow_href = Cow::Borrowed(current_href.as_str());
 
                 let new_href = match rel_type.as_str() {
-                    "stylesheet" => fixup_styles(&trackers.styles, cow_href)
+                    "stylesheet" => fixup_styles(site_path_prefix, &trackers.styles, cow_href)
                         .map_err(|why| Into::<Error>::into(why))?,
-                    "script" => fixup_scripts(&trackers.scripts, cow_href)
+                    "script" => fixup_scripts(site_path_prefix, &trackers.scripts, cow_href)
                         .map_err(|why| Into::<Error>::into(why))?,
                     _ => {
                         return Ok(());
@@ -77,8 +86,10 @@ pub fn fixup_html(
 
                 let new_content = match property.as_str() {
                     "og:url" => cow_current_content,
-                    "og:image" => fixup_image(&trackers.images, cow_current_content)
-                        .map_err(|why| Into::<Error>::into(why))?,
+                    "og:image" => {
+                        fixup_image(site_path_prefix, &trackers.images, cow_current_content)
+                            .map_err(|why| Into::<Error>::into(why))?
+                    }
                     _ => {
                         return Ok(());
                     }
@@ -126,6 +137,7 @@ fn fixup_abs_link<'a>(build_id: Option<u64>, destination: Cow<'a, str>) -> Cow<'
 }
 
 fn fixup_image<'a>(
+    site_path_prefix: &str,
     images: &Tracker<Image>,
     destination: Cow<'a, str>,
 ) -> Result<Cow<'a, str>, Error> {
@@ -140,51 +152,50 @@ fn fixup_image<'a>(
     let intermediary = prefixing_it_up("images", destination);
 
     images
-        .get(intermediary)
+        .get(format!("{site_path_prefix}/{intermediary}"))
         .map(|img| Cow::Owned(img.default.to_string()))
         .map_err(|why| Error::new(why))
 }
 
 fn fixup_styles<'a>(
+    site_path_prefix: &str,
     styles: &Tracker<Stylesheet>,
     destination: Cow<'a, str>,
 ) -> Result<Cow<'a, str>, Error> {
-    if !destination.ends_with(".css") {
+    if !destination.ends_with(".css") || destination.starts_with("/pagefind") {
         return Ok(destination);
     }
-
     let intermediary = prefixing_it_up("styles", destination);
 
     styles
-        .get(intermediary)
+        .get(format!("{site_path_prefix}/{intermediary}"))
         .map(|stylesheet| Cow::Owned(stylesheet.path.to_string()))
         .map_err(|why| Error::new(why))
 }
 
 fn fixup_scripts<'a>(
+    site_path_prefix: &str,
     scripts: &Tracker<Script>,
     destination: Cow<'a, str>,
 ) -> Result<Cow<'a, str>, Error> {
-    if !destination.ends_with(".js") {
+    if !destination.ends_with(".js") || destination.starts_with("/pagefind") {
         return Ok(destination);
     }
 
     let intermediary = prefixing_it_up("scripts", destination);
 
     scripts
-        .get(intermediary)
+        .get(format!("{site_path_prefix}/{intermediary}"))
         .map(|script| Cow::Owned(script.path.to_string()))
         .map_err(|why| Error::new(why))
 }
 
 fn prefixing_it_up<'a>(prefix: &'static str, destination: Cow<'a, str>) -> Cow<'a, str> {
     if destination.starts_with(prefix) {
-        destination
-    } else if destination.starts_with(&format!("/{prefix}")) {
-        Cow::Owned(destination.strip_prefix("/").unwrap().to_string())
-    } else {
-        Cow::Owned(format!("{prefix}/{}", destination))
+        return destination;
     }
+    let stripped_str = destination.trim_start_matches('/');
+    Cow::Owned(format!("{}/{}", prefix, stripped_str))
 }
 
 fn rewrite_external_http_links<'a>(destination: Cow<'a, str>) -> Cow<'a, str> {

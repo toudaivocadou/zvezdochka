@@ -73,6 +73,7 @@ pub struct SiteData {
     pub make_vendoring: bool,
     pub offline_mode: bool,
     pub build_id: Option<u64>,
+    pub source_path: String,
 }
 
 pub fn buildsite(
@@ -88,15 +89,16 @@ pub fn buildsite(
         make_vendoring,
         offline_mode,
         build_id,
+        source_path,
     };
     info!("Starting Site Build. サイト建築始め中");
     info!("Base Site URL: {}", &site_data.site_url);
-    info!("Site Source Path: {}", &source_path);
+    info!("Site Source Path: {}", &site_data.source_path);
     // TODO: Vendoring.
     if make_vendoring {
         warn!(
             "Will make request vendors and place them into {}/.vendor",
-            &source_path
+            &site_data.source_path
         );
     }
     if offline_mode {
@@ -109,21 +111,21 @@ pub fn buildsite(
 
     let styles = config
         .load_css()
-        .entry(format!("{source_path}/styles/*.css"))?
+        .entry(format!("{}/styles/*.css", &site_data.source_path))?
         .register();
 
     let images = config
         .load_images()
-        .glob(format!("{source_path}/images/**/*.png"))?
-        .glob(format!("{source_path}/images/**/*.jpg"))?
-        .glob(format!("{source_path}/images/**/*.jpeg"))?
-        .glob(format!("{source_path}/images/**/*.avif"))?
-        .glob(format!("{source_path}/images/**/*.gif"))?
+        .glob(format!("{}/images/**/*.png", &site_data.source_path))?
+        .glob(format!("{}/images/**/*.jpg", &site_data.source_path))?
+        .glob(format!("{}/images/**/*.jpeg", &site_data.source_path))?
+        .glob(format!("{}/images/**/*.avif", &site_data.source_path))?
+        .glob(format!("{}/images/**/*.gif", &site_data.source_path))?
         .register();
 
     let scripts = config
         .load_esbuild()
-        .entry(format!("{source_path}/js/*.js"))?
+        .entry(format!("{}/js/*.js", &site_data.source_path))?
         .bundle(true)
         .minify(true)
         .register();
@@ -144,22 +146,22 @@ pub fn buildsite(
 
     let members = config
         .load_documents::<MemberMeta>()
-        .glob(format!("{source_path}/members/[!_]*.md"))?
+        .glob(format!("{}/members/[!_]*.md", &site_data.source_path))?
         .register();
 
     let works = config
         .load_documents::<WorkMeta>()
-        .glob(format!("{source_path}/works/[!_]*.md"))?
+        .glob(format!("{}/works/[!_]*.md", &site_data.source_path))?
         .register();
 
     let albums = config
         .load_documents::<AlbumMeta>()
-        .glob(format!("{source_path}/albums/[!_]*.md"))?
+        .glob(format!("{}/albums/[!_]*.md", &site_data.source_path))?
         .register();
 
     let news = config
         .load_documents::<NewsMeta>()
-        .glob(format!("{source_path}/news/[!_]*.md"))?
+        .glob(format!("{}/news/[!_]*.md", &site_data.source_path))?
         .register();
 
     // build SiteMap
@@ -246,7 +248,7 @@ pub fn buildsite(
         },
     );
 
-    let _work_pages = config
+    let work_pages = config
         .task()
         .each(works)
         .using((environment, namemap, images, scripts, styles, albums))
@@ -283,6 +285,7 @@ pub fn buildsite(
                 };
 
                 let html_fixup = fixup_html(
+                    &site_data.env.data.source_path,
                     site_data.env.data.build_id,
                     trackers,
                     full_html.into_string(),
@@ -290,13 +293,13 @@ pub fn buildsite(
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
                 Ok(Output::html(
-                    format!("/works/releases/{path}.html"),
+                    format!("works/releases/{path}.html"),
                     html_fixup,
                 ))
             },
         );
 
-    let _album_pages = config
+    let album_pages = config
         .task()
         .each(albums)
         .using((environment, namemap, images, scripts, styles))
@@ -333,6 +336,7 @@ pub fn buildsite(
                 };
 
                 let html_fixup = fixup_html(
+                    &site_data.env.data.source_path,
                     site_data.env.data.build_id,
                     trackers,
                     full_html.into_string(),
@@ -340,13 +344,13 @@ pub fn buildsite(
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
                 Ok(Output::html(
-                    format!("/works/albums/{path}/index.html"),
+                    format!("works/albums/{path}/index.html"),
                     html_fixup,
                 ))
             },
         );
 
-    let _news_pages = config
+    let news_pages = config
         .task()
         .each(news)
         .using((environment, namemap, images, scripts, styles))
@@ -388,17 +392,18 @@ pub fn buildsite(
                 };
 
                 let html_fixup = fixup_html(
+                    &site_data.env.data.source_path,
                     site_data.env.data.build_id,
                     trackers,
                     full_html.into_string(),
                 )
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
-                Ok(Output::html(format!("/news/{path}/index.html"), html_fixup))
+                Ok(Output::html(format!("news/{path}/index.html"), html_fixup))
             },
         );
 
-    let _member_pages = config
+    let member_pages = config
         .task()
         .each(members)
         .using((
@@ -446,6 +451,7 @@ pub fn buildsite(
                 };
 
                 let html_fixup = fixup_html(
+                    &site_data.env.data.source_path,
                     site_data.env.data.build_id,
                     trackers,
                     full_html.into_string(),
@@ -453,7 +459,7 @@ pub fn buildsite(
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
                 Ok(Output::html(
-                    format!("/members/{}/index.html", &members.matter.ascii_name),
+                    format!("members/{}/index.html", &members.matter.ascii_name),
                     html_fixup,
                 ))
             },
@@ -487,13 +493,14 @@ pub fn buildsite(
             };
 
             let html_fixup = fixup_html(
+                &site_data.env.data.source_path,
                 site_data.env.data.build_id,
                 trackers,
                 full_html.into_string(),
             )
             .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
-            Ok(Output::html("/members/index.html", html_fixup))
+            Ok(Output::html("members/index.html", html_fixup))
         });
 
     let _works_album_index = config
@@ -524,13 +531,14 @@ pub fn buildsite(
             };
 
             let html_fixup = fixup_html(
+                &site_data.env.data.source_path,
                 site_data.env.data.build_id,
                 trackers,
                 full_html.into_string(),
             )
             .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
-            Ok(Output::html("/works/index.html", html_fixup))
+            Ok(Output::html("works/index.html", html_fixup))
         });
 
     let _news_index = config
@@ -561,13 +569,14 @@ pub fn buildsite(
             };
 
             let html_fixup = fixup_html(
+                &site_data.env.data.source_path,
                 site_data.env.data.build_id,
                 trackers,
                 full_html.into_string(),
             )
             .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
-            Ok(Output::html("/news/index.html", html_fixup))
+            Ok(Output::html("news/index.html", html_fixup))
         });
 
     // begin static construction
@@ -585,7 +594,7 @@ pub fn buildsite(
             let page = join_vocadou(&namemap, &works);
 
             let metadata = GenericMeta {
-                path: "/join.html",
+                path: "join.html",
                 section: Sections::Join,
                 title: "参加案内",
             };
@@ -598,6 +607,7 @@ pub fn buildsite(
             };
 
             let html_fixup = fixup_html(
+                &site_data.env.data.source_path,
                 site_data.env.data.build_id,
                 trackers,
                 full_html.into_string(),
@@ -620,7 +630,7 @@ pub fn buildsite(
             let page = index();
 
             let metadata = GenericMeta {
-                path: "/index.html",
+                path: "index.html",
                 section: Sections::Home,
                 title: "ホーム",
             };
@@ -633,6 +643,7 @@ pub fn buildsite(
             };
 
             let html_fixup = fixup_html(
+                &site_data.env.data.source_path,
                 site_data.env.data.build_id,
                 trackers,
                 full_html.into_string(),
@@ -642,8 +653,18 @@ pub fn buildsite(
             Ok(Output::html(metadata.path, html_fixup))
         });
 
+    config
+        .use_pagefind()
+        .index(work_pages)
+        .index(album_pages)
+        .index(member_pages)
+        .index(news_pages)
+        .register();
+
+    // TODO: RSS/Atom Feed
+
     let mut website = config
-        .copy_static(format!("{source_path}/public"), "")
+        .copy_static(format!("{}/public", &site_data.source_path), "")
         .finish();
 
     let _diagnostics = website.build(site_data)?;
