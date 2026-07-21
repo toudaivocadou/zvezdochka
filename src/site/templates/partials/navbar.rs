@@ -56,7 +56,7 @@ impl Display for Sections {
 
 pub fn navbar(current_section: Sections) -> Markup {
     html! {
-        header {
+        header data-pagefind-ignore="all" {
             div .container {
                 a href="/index.html" {
                     h1 {
@@ -71,6 +71,8 @@ pub fn navbar(current_section: Sections) -> Markup {
                         (navbar_item("/members/index.html", current_section == Sections::Members || current_section == Sections::MemberProfile, "メンバー紹介"))
                         (navbar_item("/works/index.html", current_section == Sections::Works || current_section == Sections::WorksPost, "作品目録"))
                         (navbar_item("/news/index.html", current_section == Sections::News || current_section == Sections::NewsPost, "ニュース"))
+                        pagefind-modal-trigger {}
+                        pagefind-modal {}
                     }
                 }
             }

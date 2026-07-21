@@ -293,7 +293,7 @@ pub fn buildsite(
                 .map_err(|why| why.context(major_context.with_substep(SubBuildStep::Fixup)))?;
 
                 Ok(Output::html(
-                    format!("works/releases/{path}.html"),
+                    format!("works/releases/{path}/index.html"),
                     html_fixup,
                 ))
             },

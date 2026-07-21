@@ -1,13 +1,16 @@
 use fancy_duration::FancyDuration;
-use maud::{Render, html};
+use maud::{PreEscaped, Render, html};
 use serde::{Deserialize, Serialize};
 use std::{hash::Hash, time::Duration};
 use time::Date;
 use url::Url;
 
 use crate::site::{
-    album::Illustration, metadata::RenderableMetadata, namemap::MemberRef,
-    templates::partials::navbar::Sections, util::format_date,
+    album::Illustration,
+    metadata::RenderableMetadata,
+    namemap::MemberRef,
+    templates::partials::navbar::Sections,
+    util::{format_date, get_link_image_thumb},
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -27,9 +30,28 @@ pub struct WorkMeta {
     pub thumbnail: Option<Illustration>,
 
     #[serde(default)]
-    pub source: Option<Url>,
+    pub link: Option<Url>,
     #[serde(default)]
     pub sns_links: Vec<Url>,
+}
+
+impl WorkMeta {
+    pub fn thumbnail_or_none(&self) -> String {
+        if let Some(thumb) = &self.thumbnail {
+            return thumb.image.clone();
+        }
+        if let Some(source) = &self.link {
+            if let Ok(link) = get_link_image_thumb(source) {
+                return link;
+            }
+        }
+
+        return "images/gray.jpg".to_string();
+    }
+
+    pub fn display_html(&self) -> PreEscaped<String> {
+        if let Some(video) = self.link {}
+    }
 }
 
 impl Hash for WorkMeta {
@@ -41,7 +63,7 @@ impl Hash for WorkMeta {
         self.duration.format().hash(state);
         self.short.hash(state);
         self.thumbnail.hash(state);
-        self.source.hash(state);
+        self.link.hash(state);
         self.sns_links.hash(state);
     }
 }

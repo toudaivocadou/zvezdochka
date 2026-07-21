@@ -1,13 +1,16 @@
 use anyhow::Error;
 use hauchiwa::{Tracker, loader::Document};
-use maud::{Markup, PreEscaped, html};
+use maud::{Markup, PreEscaped, Render, html};
 
 use crate::site::{
     album::AlbumMeta,
     member::MemberMeta,
     namemap::NameMap,
     news::NewsMeta,
-    templates::{functions::sns::sns_icon, news::NEWS_MISSING_AUTHOR},
+    templates::{
+        functions::{embed::embed, sns::sns_icon},
+        news::NEWS_MISSING_AUTHOR,
+    },
     util::{author_list, image_or_gray, reference},
     work::WorkMeta,
 };
@@ -16,16 +19,18 @@ pub fn member_index(members: Tracker<'_, Document<MemberMeta>>) -> Result<Markup
     Ok(html! {
         section #members-hero {
             .container {
-                h2 { "メンバー紹介" }
+                h1 { "メンバー紹介" }
                 p { "東京大学ボカロP同好会で活動する個性豊かなメンバーたちをご紹介します。" }
             }
         }
 
         section #staff-members {
-            .zcontainer {
-                .member-grid {
-                    @for (_, member) in members {
-                        (member_card(&member.matter)?)
+            .container {
+                .zcontainer {
+                    .member-grid {
+                        @for (_, member) in members {
+                            (member_card(&member.matter)?)
+                        }
                     }
                 }
             }
@@ -43,7 +48,7 @@ fn member_card(member: &MemberMeta) -> Result<Markup, Error> {
                         img .member-image .img-placeholder src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
                     }
                     .member-info #(member.ascii_name) {
-                        h3 { (member.name) }
+                        h1 { (member.name) }
                         @if let Some(role) = &member.position {
                             p .member-role { (role) }
                         }
@@ -102,10 +107,10 @@ pub fn member_detail(
             .member-detail-container {
                 .member-profile {
                     .member-profile-image {
-                        img .img-placeholder src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
+                        img .img-placeholder data-pagefind-meta="image[src], image_alt[alt]" src=(format!("icon/{}.jpg", member.ascii_name)) alt=(member.name);
                     }
                     .member-profile-info {
-                        h2 { (member.name) }
+                        h1 data-pagefind-meta=(format!("title:{} ({})", member.name, member.ascii_name)) { (member.name) }
                         @if let Some(role) = &member.position {
                             p .member-role { (role) }
                         }
@@ -116,6 +121,9 @@ pub fn member_detail(
                             @for link in &member.links {
                                 (sns_icon(link)?)
                             }
+                            @if member.links.is_empty() {
+                                .social-icon-size style="visibility: hidden" {}
+                            }
                         }
                     }
                 }
@@ -125,6 +133,9 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿作品" }
                     .container {
+                        @if recent_works.is_empty() {
+                            p { i { "投稿作品がございません。" } }
+                        }
                         @for featured in recent_works {
                             (featured_work_detail(featured))
                         }
@@ -134,6 +145,9 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿ニュース" }
                     .container {
+                        @if recent_news.is_empty() {
+                            p { i { "投稿作品がございません。" } }
+                        }
                         @for news in recent_news {
                             (featured_post_detail(news)?)
                         }
@@ -143,6 +157,9 @@ pub fn member_detail(
                 .member-featured-works {
                     h3 { "最近投稿アルバム" }
                     .container {
+                        @if recent_albums.is_empty() {
+                            p { i { "投稿作品がございません。" } }
+                        }
                         @for featured in recent_albums {
                             (featured_album_detail(names, featured)?)
                         }
@@ -160,11 +177,30 @@ pub fn member_detail(
 }
 
 fn featured_work_detail(work: &WorkMeta) -> Markup {
+    let embed = match &work.link {
+        Some(l) => match embed(l.as_str()) {
+            Ok(e) => e.render(),
+            Err(_) => {
+                let w = work.thumbnail_or_none();
+                html! {
+                    img .img-placeholder src=(w) alt=(work.title);
+                }
+            }
+        },
+        None => {
+            let w = work.thumbnail_or_none();
+            html! {
+                img .img-placeholder src=(w) alt=(work.title);
+            }
+        }
+    };
     html! {
         .work-item-detail id=(urlencoding::encode(&work.title)) {
             h4 { (work.title) }
             .work-youtube-container {
-                img .work-item-thumb src=(image_or_gray(work.thumbnail.as_ref().map(|x| &x.image))) alt=(work.title) {}
+                .youtube-embed-container {
+                    (embed)
+                }
             }
 
             .work-description {
@@ -177,7 +213,7 @@ fn featured_work_detail(work: &WorkMeta) -> Markup {
                 }
             }
 
-            .click-button{
+            .back-button{
                 a href=(format!("/works/releases/{}/index.html", reference(&work.title, &work.authors, &work.additional_authors))) {
                     p { "詳しく見る" }
                 }
@@ -234,7 +270,7 @@ fn featured_album_detail(name_map: &NameMap, album_meta: &AlbumMeta) -> Result<M
                 p .work-role {
                     (album_meta.date)
                 }
-                p .member-role {
+                .member-role {
                     (author_list(name_map, &album_meta.authors, &album_meta.additional_authors))
                 }
             }

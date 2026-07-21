@@ -1,9 +1,12 @@
+use crate::site::die_linky::SocialLinkType;
 use crate::site::metadata::RenderableMetadata;
 use crate::site::namemap::NameMap;
 use anyhow::Error;
 use base64::Engine;
 use base64::prelude::BASE64_URL_SAFE_NO_PAD;
 use camino::Utf8PathBuf;
+use deunicode::deunicode;
+use kakasi::{IsJapanese, convert, is_japanese};
 use maud::{Markup, PreEscaped, html};
 use minijinja::Environment;
 use pulldown_cmark::html::push_html;
@@ -13,6 +16,7 @@ use std::fmt::Display;
 use std::hash::Hasher;
 use time::Date;
 use time::macros::format_description;
+use url::Url;
 
 // pub fn shorten(content: &str) -> String {
 //     content.chars().take(150).collect::<String>()
@@ -128,14 +132,66 @@ where
             let item = item.as_ref();
             hasher.write(item.as_bytes());
         });
-    let limited = title
-        .chars()
-        .take(30)
-        .map(|c| if c == ' ' { return '-' } else { return c })
-        .collect::<String>();
-    let encoded_title = urlencoding::encode(&limited);
+
+    let author_list = known_authors
+        .iter()
+        .chain(unknown_authors)
+        .take(3)
+        .map(|name| {
+            let fixed = name.as_ref().replace(
+                &[
+                    '(', ')', '、', ',', '/', '\\', '.', '。', '!', '！', '"', '\'', '’', '”',
+                    '「', '」', '{', '}', '・', '@', '#', '$', '%', '^', '&', '*', ';', '；', ':',
+                    '：', '`', '｀', '~', '〜',
+                ],
+                "",
+            );
+            let fixed2 = fixed.replace(&[' ', '　'], "_");
+            format!("~{fixed2}")
+        })
+        .collect::<Vec<String>>();
+
+    let transliterated = {
+        // let fixed = title.replace(
+        //     &[
+        //         '(', ')', '、', ',', '/', '\\', '.', '。', '!', '！', '"', '\'', '’', '”', '「',
+        //         '」', '{', '}', '・', '@', '#', '$', '%', '^', '&', '*', ';', '；', ':', '：', '`',
+        //         '｀', '~', '〜',
+        //     ],
+        //     "",
+        // );
+        // let fixed2 = fixed.replace(&[' ', '　'], "_");
+        let is_ja = is_japanese(&title);
+        let converted = if is_ja == IsJapanese::Maybe || is_ja == IsJapanese::True {
+            convert(title).romaji
+        } else {
+            deunicode(&title)
+        };
+        converted.replace(&[' ', '　'], "_").replace(
+            &[
+                '(', ')', '、', ',', '/', '\\', '.', '。', '!', '！', '"', '\'', '’', '”', '「',
+                '」', '{', '}', '・', '@', '#', '$', '%', '^', '&', '*', ';', '；', ':', '：', '`',
+                '｀', '~', '〜',
+            ],
+            "",
+        )
+    };
+
+    let limited = transliterated.chars().take(30).collect::<String>();
     let cachebust = BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_le_bytes());
-    format!("{encoded_title}_{cachebust}")
+
+    let authors = known_authors.len() + unknown_authors.len();
+    let out = if authors > 3 {
+        let concat = author_list.concat();
+        format!("{limited}-{concat}~et.al.{cachebust}")
+    } else if authors > 0 {
+        let concat = author_list.concat();
+        format!("{limited}-{concat}.{cachebust}")
+    } else {
+        format!("{limited}.{cachebust}")
+    };
+
+    urlencoding::encode(&out).to_string()
 }
 
 pub fn known_invalid_link<S>(inner: &S) -> Markup
@@ -143,8 +199,8 @@ where
     S: AsRef<str>,
 {
     html! {
-        a .invalid-link href = "." {
-            (inner.as_ref())
+        a .invalid-link title="この投稿者は登録していません。" {
+            i { (inner.as_ref()) }
         };
     }
 }
@@ -168,8 +224,8 @@ where
         // PANIC: This cannot panic because by the time we are here we already checked every meta.
         let member_name = names.members.get(author).unwrap();
         html! {
-            a .member-role .member-bio href = (format!("/members/{}.html", member_name)) {
-                (author)
+            a .member-role href = (format!("/members/{}/index.html", author)) {
+                (member_name)
             };
         }
     });
@@ -216,6 +272,7 @@ pub enum SubBuildStep {
     Templating,
     BaseHTMLFilling,
     Fixup,
+    // PathOut,
 }
 
 #[derive(Clone, Debug)]
@@ -263,5 +320,23 @@ impl Display for ErrorCtx {
             writeln!(f, "ファイル`{}`処理中...", file)?;
         }
         Ok(())
+    }
+}
+
+pub fn get_link_image_thumb(link: &Url) -> Result<String, Error> {
+    let url_type = SocialLinkType::from_url(link)?;
+    match url_type {
+        SocialLinkType::Youtube => {
+            let youtube_video_id = link
+                .query_pairs()
+                .find(|(key, _)| key == "v")
+                .ok_or(Error::msg("Invalid youtube id"))?
+                .1;
+            Ok(format!(
+                "https://img.youtube.com/vi/{}/maxresdefault.jpg",
+                youtube_video_id
+            ))
+        }
+        _ => Err(Error::msg("Cannot get thumbnail for this url type.")),
     }
 }

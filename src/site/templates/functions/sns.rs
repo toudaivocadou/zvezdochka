@@ -15,7 +15,7 @@ pub fn sns_icon(link: &Url) -> Result<Markup, Error> {
     };
     Ok(html! {
         a .social-icon .social-icon-size href=(link) {
-            img alt=(link) src=(format!("public/social_icons/{}", sns_url_icon)) style=(special_style);
+            img alt=(link) src=(format!("/social_icons/{}", sns_url_icon)) style=(special_style);
         }
     })
 }

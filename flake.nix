@@ -76,7 +76,7 @@
             sqlx-cli
           ]);
 
-          env.RUST_SRC_PATH = "${rustbin}/lib/rustlib/src/rust/library";
+          env.RUST_SRC_PbaseATH = "${rustbin}/lib/rustlib/src/rust/library";
           env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
 
           shellHook = ''

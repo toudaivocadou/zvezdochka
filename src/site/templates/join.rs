@@ -25,16 +25,19 @@ pub fn join_vocadou(name_map: &NameMap, works: &Tracker<'_, Document<WorkMeta>>)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     works.reverse();
+    works.truncate(30);
     let works = works.into_iter().map(|document| {
         html! {
             .card {
-                .youtube-embed-container {}
-                a href=(format!("/works/releases/{}.html", reference(&document.matter.title, &document.matter.authors, &document.matter.additional_authors ))) {
-                    h6 {
+                .youtube-embed-container {
+                    img .img-placeholder src=(document.matter.thumbnail_or_none()) alt=(document.matter.title);
+                }
+                a href=(format!("/works/releases/{}/index.html", reference(&document.matter.title, &document.matter.authors, &document.matter.additional_authors ))) {
+                    h4 {
                         (document.matter.title)
                     }
                 }
-                p { "投稿者: " (author_list(&name_map, &document.matter.authors, &document.matter.additional_authors)) }
+                p style="font-size:medium;"{ (author_list(&name_map, &document.matter.authors, &document.matter.additional_authors)) }
             }
         }
     }).collect::<Vec<PreEscaped<String>>>();
