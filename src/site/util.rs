@@ -14,8 +14,6 @@ use pulldown_cmark::{Event, Options, Parser};
 use seahash::SeaHasher;
 use std::fmt::Display;
 use std::hash::Hasher;
-use time::Date;
-use time::macros::format_description;
 use url::Url;
 
 // pub fn shorten(content: &str) -> String {
@@ -92,10 +90,10 @@ pub fn render_markdown(
 //     return format!("{root}/{path}");
 // }
 
-pub fn format_date(date: Date) -> String {
-    let format = format_description!("[year]-[month]-[day]");
-    date.format(format).unwrap()
-}
+//pub fn format_date(date: Date) -> String {
+//    let format = format_description!("[year]-[month]-[day]");
+//    date.format(format).unwrap()
+//}
 
 // pub fn hash<T: std::hash::Hash>(item: &T) -> u64 {
 //     let mut seahasher = SeaHasher::default();

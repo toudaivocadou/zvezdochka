@@ -1,11 +1,11 @@
 use crate::site::album::AlbumMeta;
-use crate::site::fixup::{TrackerSet, fixup_html};
+use crate::site::fixup::{TrackerSet, fixup_abs_link, fixup_html};
 use crate::site::member::MemberMeta;
 use crate::site::metadata::GenericMeta;
 use crate::site::namemap::{MemberRef, NameMap};
 use crate::site::news::NewsMeta;
 use crate::site::templates::base::base;
-use crate::site::templates::functions::embed::jinja_embed;
+use crate::site::templates::functions::embed::{embed, jinja_embed};
 use crate::site::templates::functions::member::jinja_member;
 use crate::site::templates::functions::sns::jinja_sns_icon;
 use crate::site::templates::index::index;
@@ -15,31 +15,34 @@ use crate::site::templates::news::{NEWS_MISSING_AUTHOR, news_detail, news_index}
 use crate::site::templates::partials::navbar::Sections;
 use crate::site::templates::works::{album_detail, work_album_index, work_detail};
 use crate::site::util::{BuildSteps, MajorContext, SubBuildStep, reference, render_markdown};
-use crate::site::work::WorkMeta;
+use crate::site::work::{WorkListWork, WorkMeta};
 use anyhow::Error;
 use clap::{Parser, ValueEnum};
 use hauchiwa::error::HauchiwaError;
 use hauchiwa::tracing::{error, info, warn};
 use hauchiwa::{Blueprint, Output};
 use indexmap::IndexMap;
+use maud::Render;
 use minijinja::Environment;
 use minijinja_contrib::add_to_environment;
 use minijinja_contrib::pycompat::unknown_method_callback;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
 use url::Url;
 
-mod album;
-mod die_linky;
-mod fixup;
-mod member;
-mod metadata;
-mod namemap;
-mod news;
+pub mod album;
+pub mod die_linky;
+pub mod events;
+pub mod fixup;
+pub mod member;
+pub mod metadata;
+pub mod namemap;
+pub mod news;
 pub mod templates;
-mod util;
-mod work;
+pub mod util;
+pub mod work;
 
 pub const FRONT_MATTER_SPLIT: &str = "===";
 
@@ -80,8 +83,10 @@ pub fn buildsite(
     build_id: Option<u64>,
     site_url: String,
     source_path: String,
+    out_dir: Option<String>,
     make_vendoring: bool,
     offline_mode: bool,
+    watch_mode: bool,
 ) -> Result<(), HauchiwaError> {
     let start_time = Instant::now();
     let site_data = SiteData {
@@ -146,23 +151,25 @@ pub fn buildsite(
 
     let members = config
         .load_documents::<MemberMeta>()
-        .glob(format!("{}/members/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/members/**/[!_]*.md", &site_data.source_path))?
         .register();
 
     let works = config
         .load_documents::<WorkMeta>()
-        .glob(format!("{}/works/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/works/**/[!_]*.md", &site_data.source_path))?
         .register();
 
     let albums = config
         .load_documents::<AlbumMeta>()
-        .glob(format!("{}/albums/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/albums/**/[!_]*.md", &site_data.source_path))?
         .register();
 
     let news = config
         .load_documents::<NewsMeta>()
-        .glob(format!("{}/news/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/news/**/[!_]*.md", &site_data.source_path))?
         .register();
+
+    // let events = config.load_documents().register();
 
     // build SiteMap
 
@@ -207,10 +214,6 @@ pub fn buildsite(
                 }
 
                 for (title, song) in &album.matter.tracks {
-                    if song.external {
-                        continue;
-                    }
-
                     for song_author in &song.authors {
                         if !members.contains_key(song_author) {
                             should_error = true;
@@ -655,6 +658,54 @@ pub fn buildsite(
             Ok(Output::html(metadata.path, html_fixup))
         });
 
+    let _works_list_json = config
+        .task()
+        .name("Create works_list.json")
+        .using((namemap, works))
+        .merge(|sitedata, (name_map, work_list)| {
+            let works = work_list
+                .iter()
+                .enumerate()
+                .map(|(idx, (_, work))| -> Result<WorkListWork, Error> {
+                    let id = idx as i32;
+                    let ref_work = reference(
+                        &work.matter.title,
+                        &work.matter.authors,
+                        &work.matter.additional_authors,
+                    );
+                    let on_site_link =
+                        fixup_abs_link(sitedata.env.data.build_id, Cow::Owned(ref_work))
+                            .to_string();
+                    let authors = work
+                        .matter
+                        .authors
+                        .iter()
+                        .map(|member_ref| {
+                            let member_link = format!("/members/{}/index.html", member_ref);
+                            let member_link_fixed =
+                                fixup_abs_link(sitedata.env.data.build_id, Cow::Owned(member_link));
+                            let member_displayname =
+                                name_map.members.get(member_ref.as_str()).unwrap();
+                            (member_displayname.clone(), member_link_fixed.to_string())
+                        })
+                        .collect::<HashMap<String, String>>();
+
+                    let embed_html = embed(&on_site_link)?.render().0;
+
+                    Ok(WorkListWork {
+                        id,
+                        title: work.matter.title.clone(),
+                        description: work.matter.short.clone().unwrap_or_default(),
+                        on_site_link,
+                        authors,
+                        embed_html,
+                    })
+                })
+                .collect::<Result<Vec<WorkListWork>, Error>>()?;
+            let work_list_json = serde_json::to_string(&works)?;
+            Ok(Output::file("works_list.json").text(work_list_json))
+        });
+
     config
         .use_pagefind()
         .index(work_pages)
@@ -665,11 +716,21 @@ pub fn buildsite(
 
     // TODO: RSS/Atom Feed
 
+    if let Some(outdir) = out_dir {
+        config = config.set_dir_dist(format!("{outdir}/dist"));
+        config = config.set_dir_cache(format!("{outdir}/.cache"));
+    }
+
     let mut website = config
         .copy_static(format!("{}/public", &site_data.source_path), "")
         .finish();
 
-    let _diagnostics = website.build(site_data)?;
+    let _diagnostics = if !watch_mode {
+        website.build(site_data)?
+    } else {
+        website.watch(site_data).expect("Failed to watch site!");
+        return Ok(());
+    };
     let end_time = Instant::now();
     let build_time = end_time.duration_since(start_time);
     info!(

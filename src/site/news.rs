@@ -1,18 +1,22 @@
+use chrono::NaiveDate;
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
-use time::Date;
 use url::Url;
 
-use crate::site::{metadata::RenderableMetadata, templates::partials::navbar::Sections};
+use crate::site::{
+    album::Illustration, metadata::RenderableMetadata, templates::partials::navbar::Sections,
+};
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, Hash, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct NewsMeta {
     pub title: String,
     #[serde(default)]
-    pub author: Option<String>,
+    pub authors: Vec<String>,
     #[serde(default)]
-    pub thumbnail: Option<String>,
-    pub date: Date,
+    pub additional_authors: Vec<String>,
+    #[serde(default)]
+    pub thumbnail: Option<Illustration>,
+    pub date: NaiveDate,
 
     #[serde(default)]
     pub short: Option<String>,
@@ -25,7 +29,7 @@ impl RenderableMetadata for NewsMeta {
     fn render_image_meta(&self) -> Option<Markup> {
         self.thumbnail.as_ref().map(|th| {
             html! {
-                meta property="og:image" content=(th);
+                meta property="og:image" content=(&th.image);
             }
         })
     }
@@ -51,8 +55,11 @@ impl Render for NewsMeta {
             @if let Some(desc) = &self.short {
                 meta property="og:description" content=(desc);
             }
-            @if let Some(author) = &self.author {
+            @for author in &self.authors {
                 meta property="og:article:author" content=(author);
+            }
+            @for a_author in &self.additional_authors {
+                meta property="og:article:author" content=(a_author);
             }
         }
     }

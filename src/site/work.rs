@@ -1,16 +1,13 @@
+use chrono::NaiveDate;
 use fancy_duration::FancyDuration;
-use maud::{PreEscaped, Render, html};
+use maud::{Render, html};
 use serde::{Deserialize, Serialize};
-use std::{hash::Hash, time::Duration};
-use time::Date;
+use std::{collections::HashMap, hash::Hash, time::Duration};
 use url::Url;
 
 use crate::site::{
-    album::Illustration,
-    metadata::RenderableMetadata,
-    namemap::MemberRef,
-    templates::partials::navbar::Sections,
-    util::{format_date, get_link_image_thumb},
+    album::Illustration, metadata::RenderableMetadata, namemap::MemberRef,
+    templates::partials::navbar::Sections, util::get_link_image_thumb,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -20,7 +17,7 @@ pub struct WorkMeta {
     pub authors: Vec<MemberRef>,
     #[serde(default)]
     pub additional_authors: Vec<String>,
-    pub date: Date,
+    pub date: NaiveDate,
     pub duration: FancyDuration<Duration>,
 
     #[serde(default)]
@@ -47,10 +44,6 @@ impl WorkMeta {
         }
 
         return "images/gray.jpg".to_string();
-    }
-
-    pub fn display_html(&self) -> PreEscaped<String> {
-        if let Some(video) = self.link {}
     }
 }
 
@@ -99,7 +92,21 @@ impl Render for WorkMeta {
             @for author in &self.authors {
                 meta property="og:music:musician" content=(author);
             }
-            meta property="og:music:release_date" content=(format_date(self.date));
+
+            @for a_author in &self.additional_authors {
+                meta property="og:music:musician" content=(a_author);
+            }
+            meta property="og:music:release_date" content=(self.date.to_string());
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WorkListWork {
+    pub id: i32,
+    pub title: String,
+    pub description: String,
+    pub on_site_link: String,
+    pub authors: HashMap<String, String>,
+    pub embed_html: String,
 }

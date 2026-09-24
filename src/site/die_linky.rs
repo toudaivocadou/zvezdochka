@@ -41,10 +41,9 @@ impl SocialLinkType {
     pub fn from_url(url: &Url) -> Result<SocialLinkType, Error> {
         let domain = url.domain().ok_or(Error::msg(format!("Bad URL: {url}")))?;
         let url_type = match domain {
-            "twitter.com" => SocialLinkType::Twitter,
-            "x.com" => SocialLinkType::Twitter,
+            "twitter.com" | "x.com" => SocialLinkType::Twitter,
             "bsky.app" => SocialLinkType::Bluesky,
-            "youtube.com" | "www.youtube.com" => SocialLinkType::Youtube,
+            "youtube.com" | "www.youtube.com" | "youtu.be" => SocialLinkType::Youtube,
             "soundcloud.com" => SocialLinkType::Soundcloud,
             "nicovideo.jp" | "www.nicovideo.jp" => SocialLinkType::NicoDouga,
             "github.com" => SocialLinkType::Github,

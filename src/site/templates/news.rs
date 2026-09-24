@@ -1,6 +1,6 @@
 use crate::site::namemap::NameMap;
 use crate::site::templates::functions::sns::sns_icon;
-use crate::site::util::image_or_gray;
+use crate::site::util::{author_list, image_or_gray};
 use crate::site::{news::NewsMeta, util::reference};
 use anyhow::Error;
 use hauchiwa::Tracker;
@@ -43,25 +43,27 @@ pub fn news_index(
     // base(sack, &metadata, Some(&[]), inner)
 }
 
-fn news_card(names: &NameMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
+fn news_card(namemap: &NameMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
+    let thumb = news_meta.thumbnail.as_ref().map(|x| &x.image);
     Ok(html! {
         .post-card {
             .member-profile-image .post-card-image {
-                img .post-img src=(image_or_gray(news_meta.thumbnail.as_ref())) {}
+                img .post-img src=(image_or_gray(thumb)) {}
             }
             .post-info {
                 h3 .post-card-title {
-                    a href=(format!("/news/{}/index.html", reference(&news_meta.title, &[news_meta.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                    a href=(format!("/news/{}/index.html", reference(&news_meta.title, &news_meta.authors, &news_meta.additional_authors))) {
                         (news_meta.title)
                     }
                 }
                 p .member-role {
                     (news_meta.date)
                 }
-                @if let Some(ascii_author) = &news_meta.author {
-                    a href=(format!("/members/{}/index.html", ascii_author)) { p { (names.members.get(ascii_author).unwrap()) } }
-                } @else {
-                    p { "東大ボカロP同好会" }
+                @if news_meta.authors.is_empty() && news_meta.additional_authors.is_empty() {
+                     p { "東大ボカロP同好会" }
+                }
+                @else {
+                    (author_list(namemap, &news_meta.authors, &news_meta.additional_authors))
                 }
                 p {
                     @if let Some(short) = news_meta.short.as_ref() {
@@ -80,24 +82,28 @@ fn news_card(names: &NameMap, news_meta: &NewsMeta) -> Result<Markup, Error> {
 }
 
 pub fn news_detail(
-    site_map: &NameMap,
+    namemap: &NameMap,
     news_meta: &NewsMeta,
     content: String,
 ) -> Result<Markup, Error> {
+    let thumb = news_meta.thumbnail.as_ref().map(|x| &x.image);
     Ok(html! {
         section #post-detail {
             .member-detail-container {
                 .member-profile {
-                    .work-image {
-                        img src=(image_or_gray(news_meta.thumbnail.as_ref())) alt="header image" { }
+                    @if let Some(t) = thumb {
+                        .work-image {
+                            img src=(t) alt="header image" { }
+                        }
                     }
                     .member-profile-info {
                         h2 { (news_meta.title) }
                         p { (news_meta.date) }
-                        @if let Some(ascii_author) = &news_meta.author {
-                            a href=(format!("/members/{}/index.html", ascii_author)) { p { (site_map.members.get(ascii_author).unwrap()) } }
-                        } @else {
-                            p { "東大ボカロP同好会" }
+                        @if news_meta.authors.is_empty() && news_meta.additional_authors.is_empty() {
+                             p { "東大ボカロP同好会" }
+                        }
+                        @else {
+                            (author_list(namemap, &news_meta.authors, &news_meta.additional_authors))
                         }
                         .member-links {
                             @for link in &news_meta.sns_links {

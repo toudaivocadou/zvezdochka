@@ -1,12 +1,11 @@
+#![deny(clippy::pedantic)]
+#![warn(clippy::all)]
+use crate::site::buildsite;
+use hauchiwa::init_logging;
 use std::error::Error;
 
-use hauchiwa::init_logging;
-
-use crate::site::buildsite;
-
-pub mod commands;
+pub mod bot;
 pub mod site;
-pub mod sql;
 
 fn main() {
     init_logging().unwrap();

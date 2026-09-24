@@ -74,12 +74,16 @@
             qrrs
             qrencode
             sqlx-cli
+            mdbook
+            sqlite
           ]);
 
           env.RUST_SRC_PbaseATH = "${rustbin}/lib/rustlib/src/rust/library";
           env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          env.DATABASE_URL = "sqlite://zvezdochka.sql";
 
           shellHook = ''
+            export CARGO="$(which cargo)"
             echo "WONDERHOOOOOY!!!!"
           '';
         };

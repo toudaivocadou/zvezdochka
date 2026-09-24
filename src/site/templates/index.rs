@@ -48,6 +48,12 @@ pub fn index() -> Markup {
                     (activity("各種レクリエーション", "不定期", "ピクニックやボカロに関するクイズ大会などで交流を深めます。"))
                 }
             }
+            //.container {
+            //    h2 { "今月のイベント" }
+            //    .activity-list {
+            //
+            //    }
+            //}
         }
 
         section #featured-work {

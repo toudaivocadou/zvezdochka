@@ -123,7 +123,7 @@ fn build_id_to_str(build_id: u64) -> String {
     BASE64_URL_SAFE_NO_PAD.encode(format!("{build_id}"))
 }
 
-fn fixup_abs_link<'a>(build_id: Option<u64>, destination: Cow<'a, str>) -> Cow<'a, str> {
+pub fn fixup_abs_link<'a>(build_id: Option<u64>, destination: Cow<'a, str>) -> Cow<'a, str> {
     match build_id {
         Some(build) => {
             if destination.starts_with("/") {

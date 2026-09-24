@@ -192,11 +192,7 @@ pub fn album_detail(
                                 dt .track-title {
                                     h2 {
                                         (number + 1) ". "
-                                        @if !track.external {
-                                            a href=(reference(title, &track.authors, &track.additional_authors)) {
-                                                (title)
-                                            }
-                                        } @else {
+                                        a href=(reference(title, &track.authors, &track.additional_authors)) {
                                             (title)
                                         }
                                     }

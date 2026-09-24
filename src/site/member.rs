@@ -26,9 +26,6 @@ pub struct MemberMeta {
 
     #[serde(default)]
     pub links: Vec<Url>, // SNSリンク
-
-                         // #[serde(default)]
-                         // pub featured_works: Vec<WorkTitleOrSource>,
 }
 
 impl RenderableMetadata for MemberMeta {

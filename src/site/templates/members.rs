@@ -7,10 +7,7 @@ use crate::site::{
     member::MemberMeta,
     namemap::NameMap,
     news::NewsMeta,
-    templates::{
-        functions::{embed::embed, sns::sns_icon},
-        news::NEWS_MISSING_AUTHOR,
-    },
+    templates::functions::{embed::embed, sns::sns_icon},
     util::{author_list, image_or_gray, reference},
     work::WorkMeta,
 };
@@ -91,7 +88,7 @@ pub fn member_detail(
     let recent_news = all_news
         .iter()
         .map(|(_, meta)| &meta.matter)
-        .filter(|post| post.author.as_ref() == Some(&member.ascii_name))
+        .filter(|post| post.authors.contains(&member.ascii_name))
         .take(5)
         .collect::<Vec<_>>();
 
@@ -223,14 +220,15 @@ fn featured_work_detail(work: &WorkMeta) -> Markup {
 }
 
 fn featured_post_detail(news: &NewsMeta) -> Result<Markup, Error> {
+    let thumb = news.thumbnail.as_ref().map(|x| &x.image);
     Ok(html! {
         .post-card style="width: 100%;" {
             .member-profile-image .post-card-image {
-                img .post-img src=(image_or_gray(news.thumbnail.as_ref())) {}
+                img .post-img src=(image_or_gray(thumb)) {}
             }
             .post-info {
                 h3 .post-card-title style="text-align: start; margin-bottom: 0px;" {
-                    a href=(format!("/news/{}/index.html", reference(&news.title, &[news.author.as_ref().map(|x| x.as_str()).unwrap_or(NEWS_MISSING_AUTHOR)], &[]))) {
+                    a href=(format!("/news/{}/index.html", reference(&news.title, &news.authors, &news.additional_authors))) {
                         (news.title)
                     }
                 }

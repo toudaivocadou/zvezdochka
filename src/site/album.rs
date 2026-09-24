@@ -1,13 +1,12 @@
 use crate::site::{
     metadata::RenderableMetadata, namemap::MemberRef, templates::partials::navbar::Sections,
-    util::format_date,
 };
+use chrono::NaiveDate;
 use fancy_duration::FancyDuration;
 use indexmap::IndexMap;
 use maud::{Markup, Render, html};
 use serde::{Deserialize, Serialize};
 use std::{hash::Hash, time::Duration};
-use time::Date;
 use url::Url;
 
 // #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -37,7 +36,7 @@ pub struct AlbumMeta {
     pub authors: Vec<String>,
     #[serde(default)]
     pub additional_authors: Vec<String>,
-    pub date: Date,
+    pub date: NaiveDate,
 
     pub link: Option<Url>,
     #[serde(default)]
@@ -110,7 +109,10 @@ impl Render for AlbumMeta {
             @for author in &self.authors {
                 meta property="og:music:musician" content=(author);
             }
-            meta property="og:music:release_date" content=(format_date(self.date));
+            @for a_author in &self.additional_authors {
+                meta property="og:music:musician" content=(a_author);
+            }
+            meta property="og:music:release_date" content=(self.date.to_string());
         }
     }
 }
@@ -122,8 +124,8 @@ pub struct Track {
     #[serde(default)]
     pub additional_authors: Vec<String>,
     pub duration: FancyDuration<Duration>,
-    #[serde(default)]
-    pub external: bool,
+    //#[serde(default)]
+    //pub external: bool,
 }
 
 impl Hash for Track {
@@ -131,7 +133,7 @@ impl Hash for Track {
         self.authors.hash(state);
         self.additional_authors.hash(state);
         self.duration.format().hash(state);
-        self.external.hash(state);
+        //self.external.hash(state);
     }
 }
 
@@ -140,7 +142,7 @@ impl PartialEq for Track {
         self.authors == other.authors
             && self.additional_authors == other.additional_authors
             && self.duration == other.duration
-            && self.external == other.external
+        //&& self.external == other.external
     }
 }
 
@@ -154,9 +156,9 @@ impl PartialOrd for Track {
             .additional_authors
             .partial_cmp(&other.additional_authors)
         {
-            Some(core::cmp::Ordering::Equal) => {}
+            Some(core::cmp::Ordering::Equal) => Some(core::cmp::Ordering::Equal),
             ord => return ord,
         }
-        self.external.partial_cmp(&other.external)
+        //self.external.partial_cmp(&other.external)
     }
 }

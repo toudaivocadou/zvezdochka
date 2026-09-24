@@ -9,3 +9,5 @@ zvezdochka.toml
 zvezdochka-state.toml
 zvezdochka.db
 zvezdochka.db-*
+zvezdochka.sql-*
+zvezdochka.sql
