@@ -221,53 +221,49 @@ where
         T::REQUIRED
     }
 
-    pub fn create_button_list(&self) -> CreateActionRow<'_> {
-        let mut buttons = Vec::with_capacity(N + 2);
-
+    pub fn create_button_list(&self) -> Vec<CreateActionRow<'_>> {
         let items_iter = self.items.iter();
         let item_ids = Self::item_ids().iter();
-        let zipped = items_iter.zip(item_ids);
+        let all_buttons = items_iter
+            .zip(item_ids)
+            .enumerate()
+            .map(|(index, (item, id))| match item {
+                Ok(_) => CreateButton::new(Cow::Borrowed(*id))
+                    .label(Cow::Owned(format!(
+                        "{}{}",
+                        Self::individual_label(),
+                        index + 1
+                    )))
+                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc("✅"))),
+                Err(_) => CreateButton::new(Cow::Borrowed(*id))
+                    .label(Cow::Owned(format!(
+                        "{}{}",
+                        Self::individual_label(),
+                        index + 1
+                    )))
+                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc("❌"))),
+            })
+            .collect::<Vec<CreateButton<'_>>>();
 
-        for (index, (item, id)) in zipped.enumerate() {
-            match item {
-                Ok(_) => {
-                    buttons.push(
-                        CreateButton::new(Cow::Borrowed(*id))
-                            .label(Cow::Owned(format!(
-                                "{}{}",
-                                Self::individual_label(),
-                                index + 1
-                            )))
-                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("✅"))),
-                    );
-                }
-                Err(_) => {
-                    buttons.push(
-                        CreateButton::new(Cow::Borrowed(*id))
-                            .label(Cow::Owned(format!(
-                                "{}{}",
-                                Self::individual_label(),
-                                index + 1
-                            )))
-                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("❌"))),
-                    );
-                }
-            }
-        }
+        // discord limits us to 5 buttons per row. due to this
+        // we split the buttons into multiple rows of buttons
+        let mut list_of_multiple_buttons = all_buttons
+            .chunks(5)
+            .map(|chubks| CreateActionRow::Buttons(Cow::Owned(chubks.to_vec())))
+            .collect::<Vec<CreateActionRow<'_>>>();
 
-        buttons.push(
+        // _shakes fist_ if only create button fns were const...
+        let default_buttons = CreateActionRow::Buttons(Cow::Owned(vec![
             CreateButton::new(Cow::Borrowed(Self::add_id()))
                 .label(Cow::Borrowed(Self::add_label()))
                 .emoji(ReactionType::Unicode(FixedString::from_static_trunc("➕"))),
-        );
-
-        buttons.push(
             CreateButton::new(Cow::Borrowed(Self::remove_id()))
                 .label(Cow::Borrowed(Self::remove_label()))
                 .emoji(ReactionType::Unicode(FixedString::from_static_trunc("🗑️"))),
-        );
+        ]));
 
-        CreateActionRow::Buttons(Cow::Owned(buttons))
+        list_of_multiple_buttons.push(default_buttons);
+        list_of_multiple_buttons
     }
 }
 
