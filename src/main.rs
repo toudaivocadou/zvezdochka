@@ -1,5 +1,8 @@
 #![deny(clippy::pedantic)]
 #![warn(clippy::all)]
+#![feature(gca_min_const_items)]
+#![feature(gca_const_items)]
+
 use crate::site::buildsite;
 use hauchiwa::init_logging;
 use std::error::Error;

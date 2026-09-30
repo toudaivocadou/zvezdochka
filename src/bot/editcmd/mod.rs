@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt::Display, gca, sync::Arc, time::Duration};
 
 use ammonia::clean;
 use anyhow::Error;
@@ -9,11 +9,12 @@ use poise::{
     Modal,
     serenity_prelude::{
         Attachment, ChannelId, CreateActionRow, CreateButton, CreateComponent, CreateTextDisplay,
-        EditMessage, GenericChannelId, Http, MessageId,
+        EditMessage, GenericChannelId, Http, MessageId, ReactionType,
         small_fixed_array::{FixedArray, FixedString},
     },
 };
 use pulldown_cmark::{Event, Options, Parser};
+use std::fmt::Debug;
 use url::Url;
 
 use crate::{
@@ -26,10 +27,25 @@ use crate::{
             ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION,
             ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK, ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK,
             ZVEZDOCHKA_TICKET_COMPONENT_DURATION, ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO,
-            ZVEZDOCHKA_TICKET_COMPONENT_ILLUST_IDX, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
+            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
+            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
+            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
             ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION, ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK,
-            ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINKS_IDX,
-            ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_IDX,
+            ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
+            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
+            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
+            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
+            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8, ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
+            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
         },
     },
     site::album::{Illustration, Track},
@@ -41,6 +57,15 @@ mod news;
 mod song;
 
 pub const FILE_SIZE_LIMIT_BYTES: u32 = 10485760; // 10 mb
+pub const DISCORD_MESSAGE_EXPLATINATION: &'static str = r#"
+### 状態絵文字の説明(まだ入力がない場合):
+- ‼️: この入力は必要
+- ❗: この入力は鑑賞
+- ℹ️: この入力は選択
+### 状態絵文字の説明(まだ入力がある場合)
+- ✅: この入力は良好
+- ❌: この入力は不良
+"#;
 
 pub enum WorkType {
     Album,
@@ -54,53 +79,196 @@ pub struct WorkState {
     pub work_state: WorkStateData,
 }
 
+pub enum AlbumWorkStatePage {
+    BasicInfo,
+    Tracks,
+}
+
 pub enum WorkStateData {
     Album {
-        basic_info: Option<BasicInfo>,
-        authors: Option<Authors>,
-        content: Option<PageContent>,
-        link: Option<MainLink>,
-        sns_links: Option<Vec<SnsLink>>,
-        thumbnail: Option<Thumbnail>,
-        illustrations: Option<Vec<Illustration>>,
-        tracks: Option<Vec<AlbumTitleAndTrack>>,
+        page: AlbumWorkStatePage,
+        basic_info: ModalWrapper<BasicInfo>,
+        authors: ModalWrapper<Authors>,
+        content: ModalWrapper<PageContent>,
+        link: ModalWrapper<MainLink>,
+        sns_links: ModalListWrapper<SnsLink, 8>,
+        thumbnail: ModalWrapper<Thumbnail>,
+        illustrations: ModalListWrapper<TitleAndIllustraion, 5>,
+        tracks: ModalListWrapper<AlbumTitleAndTrack, 20>,
     },
     Artist {
-        artist_info: Option<MemberBasicInfo>,
-        additional_artist_info: Option<ExtendedMemberBasicInfo>,
-        sns_links: Option<Vec<SnsLink>>,
-        content: Option<PageContent>,
+        artist_info: ModalWrapper<MemberBasicInfo>,
+        additional_artist_info: ModalWrapper<ExtendedMemberBasicInfo>,
+        sns_links: ModalListWrapper<SnsLink, 8>,
+        content: ModalWrapper<PageContent>,
     },
     News {
-        basic_info: Option<BasicInfo>,
-        authors: Option<Authors>,
-        content: Option<PageContent>,
-        thumbnail: Option<Thumbnail>,
-        sns_links: Option<Vec<SnsLink>>,
+        basic_info: ModalWrapper<BasicInfo>,
+        authors: ModalWrapper<Authors>,
+        content: ModalWrapper<PageContent>,
+        thumbnail: ModalWrapper<Thumbnail>,
+        sns_links: ModalListWrapper<SnsLink, 8>,
     },
     Song {
-        basic_info: Option<BasicInfo>,
-        authors: Option<Authors>,
-        duration: Option<TrackDuration>,
-        content: Option<PageContent>,
-        thumbnail: Option<Thumbnail>,
-        sns_links: Option<Vec<SnsLink>>,
+        basic_info: ModalWrapper<BasicInfo>,
+        authors: ModalWrapper<Authors>,
+        duration: ModalWrapper<TrackDuration>,
+        content: ModalWrapper<PageContent>,
+        thumbnail: ModalWrapper<Thumbnail>,
+        sns_links: ModalListWrapper<SnsLink, 8>,
     },
 }
 
-pub enum ErrorState {
-    Unset,
-    Ok,
-    Bad,
-}
-
-pub struct ModalWrapper<T>
+#[derive(Debug)]
+pub enum ModalWrapper<T>
 where
     T: FromModal,
 {
-    value: T,
-    previous_modal_input: Option<T::Input>,
-    state: ErrorState,
+    Unset,
+    Ok {
+        input: T::Input,
+        value: T,
+    },
+    Bad {
+        input: T::Input,
+        error: Box<anyhow::Error>,
+    },
+}
+
+impl<T> ModalWrapper<T>
+where
+    T: FromModal,
+{
+    pub fn id() -> &'static str {
+        T::ID
+    }
+
+    pub fn label() -> &'static str {
+        T::LABEL
+    }
+
+    pub fn required() -> Required {
+        T::REQUIRED
+    }
+
+    pub fn create_discord_button(&self) -> CreateButton<'static> {
+        let status = match &self {
+            ModalWrapper::Unset => match Self::required() {
+                Required::Yes => "‼️",
+                Required::Recommended => "❗",
+                Required::Optional => "ℹ️",
+            },
+            ModalWrapper::Ok { .. } => "✅",
+            ModalWrapper::Bad { .. } => "❌",
+        };
+
+        CreateButton::new(Cow::Borrowed(Self::id()))
+            .label(Cow::Borrowed(Self::label()))
+            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                status,
+            )))
+    }
+
+    pub fn item_status(&self) -> String {
+        let status = match &self {
+            ModalWrapper::Unset => "未定義値(ご入力おねがいします)".to_string(),
+            ModalWrapper::Ok { .. } => "良好".to_string(),
+            ModalWrapper::Bad { error, .. } => format!("エラーが発生しました: {:?}", error),
+        };
+
+        format!(
+            r#"
+- {}の状態: {}のアイテム、今は{}
+            "#,
+            Self::label(),
+            Self::required(),
+            status
+        )
+    }
+}
+
+pub struct ModalListWrapper<T, const N: usize>
+where
+    T: FromListModal<N>,
+{
+    items: Vec<Result<T, Error>>,
+    previous_inputs: Vec<Option<T::AddOrIndividualInput>>,
+}
+
+impl<T, const N: usize> ModalListWrapper<T, N>
+where
+    T: FromListModal<N>,
+{
+    pub fn add_id() -> &'static str {
+        T::ADD_MODAL_ID
+    }
+    pub fn add_label() -> &'static str {
+        T::ADD_MODAL_LABEL
+    }
+    pub fn remove_id() -> &'static str {
+        T::REMOVE_MODAL_ID
+    }
+    pub fn remove_label() -> &'static str {
+        T::REMOVE_MODAL_LABEL
+    }
+    pub fn item_ids() -> &'static [&'static str; N] {
+        &T::ITEM_IDS
+    }
+    pub fn individual_label() -> &'static str {
+        T::INDIVIDUAL_LABEL_PREFIX
+    }
+    pub fn required() -> Required {
+        T::REQUIRED
+    }
+
+    pub fn create_button_list(&self) -> CreateActionRow<'_> {
+        let mut buttons = Vec::with_capacity(N + 2);
+
+        let items_iter = self.items.iter();
+        let item_ids = Self::item_ids().iter();
+        let zipped = items_iter.zip(item_ids);
+
+        for (index, (item, id)) in zipped.enumerate() {
+            match item {
+                Ok(_) => {
+                    buttons.push(
+                        CreateButton::new(Cow::Borrowed(*id))
+                            .label(Cow::Owned(format!(
+                                "{}{}",
+                                Self::individual_label(),
+                                index + 1
+                            )))
+                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("✅"))),
+                    );
+                }
+                Err(_) => {
+                    buttons.push(
+                        CreateButton::new(Cow::Borrowed(*id))
+                            .label(Cow::Owned(format!(
+                                "{}{}",
+                                Self::individual_label(),
+                                index + 1
+                            )))
+                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("❌"))),
+                    );
+                }
+            }
+        }
+
+        buttons.push(
+            CreateButton::new(Cow::Borrowed(Self::add_id()))
+                .label(Cow::Borrowed(Self::add_label()))
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc("➕"))),
+        );
+
+        buttons.push(
+            CreateButton::new(Cow::Borrowed(Self::remove_id()))
+                .label(Cow::Borrowed(Self::remove_label()))
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc("🗑️"))),
+        );
+
+        CreateActionRow::Buttons(Cow::Owned(buttons))
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -121,63 +289,31 @@ impl Display for Required {
     }
 }
 
-trait FromModal: Sized {
+trait FromModal: Sized + Clone + Debug {
     const ID: &'static str;
     const LABEL: &'static str;
     const REQUIRED: Required;
 
-    type Input;
+    type Input: Modal;
 
     fn parse(input: Self::Input) -> Result<Self, Error>;
 }
 
-impl<T> FromModal for Option<T>
-where
-    T: FromModal,
-{
-    const ID: &'static str = T::ID;
+trait FromListModal<const MAX_ITEMS: usize>: Sized + Clone + Debug {
+    const ADD_MODAL_ID: &'static str;
+    const ADD_MODAL_LABEL: &'static str;
+    const REMOVE_MODAL_ID: &'static str;
+    const REMOVE_MODAL_LABEL: &'static str;
+    const ITEM_IDS: [&'static str; MAX_ITEMS];
+    const INDIVIDUAL_LABEL_PREFIX: &'static str;
+    const REQUIRED: Required;
 
-    const LABEL: &'static str = T::LABEL;
+    type AddOrIndividualInput: Modal;
+    type DeleteInput: Modal;
 
-    const REQUIRED: Required = T::REQUIRED;
+    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error>;
 
-    type Input = T::Input;
-
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        Ok(Some(T::parse(input)?))
-    }
-}
-
-impl<T> FromModal for &Option<T>
-where
-    T: FromModal,
-{
-    const ID: &'static str = T::ID;
-
-    const LABEL: &'static str = T::LABEL;
-
-    const REQUIRED: Required = T::REQUIRED;
-
-    type Input = T::Input;
-
-    // yes i do understand this is a crime but please bear with me i just need to access the constants :c
-    fn parse(_input: Self::Input) -> Result<Self, Error> {
-        return Err(Error::msg(
-            "Because Vorkuta-5 does not exist. People from Vorkuta-5 do not exist.",
-        ));
-    }
-}
-
-fn id_of_type<T: FromModal>(_id: &T) -> &'static str {
-    T::ID
-}
-
-fn label_of_type<T: FromModal>(_id: &T) -> &'static str {
-    T::LABEL
-}
-
-fn required_of_type<T: FromModal>(_id: &T) -> Required {
-    T::REQUIRED
+    fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error>;
 }
 
 fn check_attachmemt_is_picture_and_under_flimit(attachment: &Attachment) -> Result<(), Error> {
@@ -210,7 +346,7 @@ pub struct BasicInfoModal {
     #[description = "年年年年-月月-日日 （例:　2026-07-31)"]
     pub date: FixedString<u16>,
 }
-
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct BasicInfo {
     pub title: String,
     pub short_description: String,
@@ -265,6 +401,7 @@ pub struct AuthorsModal {
     pub additional_authors: FixedString<u16>,
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Authors {
     pub authors: Vec<String>,
     pub additional_authors: Vec<String>,
@@ -296,6 +433,7 @@ pub struct PageContentModal {
     pub content: FixedString<u16>,
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct PageContent {
     pub content: String,
 }
@@ -328,6 +466,7 @@ pub struct MainLinkModal {
     pub link: FixedString<u16>,
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct MainLink {
     pub url: Url,
 }
@@ -341,31 +480,6 @@ impl FromModal for MainLink {
 
     fn parse(input: Self::Input) -> Result<Self, Error> {
         Ok(MainLink {
-            url: Url::parse(&input.link)?,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
-#[name = "SNSリンク追加"]
-#[text_display = "マニュアル:　"]
-pub struct SnsLinksModal {
-    pub link: FixedString<u16>,
-}
-
-pub struct SnsLink {
-    pub url: Url,
-}
-
-impl FromModal for SnsLink {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK;
-    const LABEL: &'static str = "SNSリンク追加";
-    const REQUIRED: Required = Required::Optional;
-
-    type Input = SnsLinksModal;
-
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        Ok(SnsLink {
             url: Url::parse(&input.link)?,
         })
     }
@@ -387,6 +501,7 @@ pub struct ThumbnailModal {
     pub additional_authors: FixedString<u16>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Thumbnail {
     pub illustration: Illustration,
     pub attachment: Attachment,
@@ -448,118 +563,6 @@ fn process_attachment(
     Ok(illustration)
 }
 
-#[derive(Clone, Debug, Modal)]
-#[name = "イラスト追加"]
-pub struct IllustrationModal {
-    #[name = "このイラストの題名"]
-    #[max_length = 50]
-    #[min_length = 1]
-    pub title: FixedString<u16>,
-    #[name = "このイラストの説明"]
-    #[max_length = 50]
-    #[min_length = 1]
-    pub description: FixedString<u16>,
-    #[file_upload]
-    #[file_types("image")]
-    #[name = "ファイル (JPG, PNG, WEBPのみ)"]
-    pub image: FixedArray<Attachment, u32>,
-    #[name = "メンバーページある作成者"]
-    #[description = "名は\",\"で分離して入力してください。英語字幕のみです。（例: mitsumori, knoeze, seeyoumayday)"]
-    pub authors: FixedString<u16>,
-    #[name = "メンバーページない作成者"]
-    #[description = "名は\",\"で分離して入力してください。（例:　リリイ・シュシュ, 金魚光線, Maurice Ravel）"]
-    pub additional_authors: FixedString<u16>,
-}
-
-pub struct TitleAndIllustraion {
-    pub title: String,
-    pub illustration: Illustration,
-    pub attachment: Attachment,
-}
-
-impl FromModal for TitleAndIllustraion {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION;
-    const LABEL: &'static str = "イラスト追加";
-    const REQUIRED: Required = Required::Optional;
-
-    type Input = IllustrationModal;
-
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        if input.image.len() != 1 {
-            return Err(Error::msg("Needs exactly one image!"));
-        }
-
-        let attachment = input.image[0].clone();
-
-        check_attachmemt_is_picture_and_under_flimit(&attachment)?;
-
-        let illustrators = parse_authors(&input.authors)?;
-        let additional_illustrators = parse_additional_authors(&input.additional_authors);
-
-        let illustration = process_attachment(
-            &attachment,
-            illustrators,
-            additional_illustrators,
-            Some(input.description.into_string()),
-        )?;
-
-        Ok(TitleAndIllustraion {
-            title: input.title.into_string(),
-            illustration,
-            attachment,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
-#[name = "アルバムトラックずつ情報"]
-pub struct AlbumTrackModal {
-    #[name = "（必須）アルバムトラック題名"]
-    #[max_length = 50]
-    #[min_length = 1]
-    pub title: FixedString<u16>,
-    #[max_length = 5]
-    #[min_length = 1]
-    #[name = "（必須）アルバムトラック長さ"]
-    #[description = "MMm SS　（例:　３分２５秒は 3m 25)"]
-    pub length_mmss: FixedString<u16>,
-    #[name = "メンバーページある作成者"]
-    #[description = "名は\",\"で分離して入力してください。空白文字は無視されます。英語字幕のみです。（例: mitsumori, knoeze)"]
-    pub authors: FixedString<u16>,
-    #[name = "メンバーページない作成者"]
-    #[description = "名は\",\"で分離して入力してください。空白文字は無視されます。（例:　リリイ・シュシュ, 金魚光線, Maurice Ravel）"]
-    pub additional_authors: FixedString<u16>,
-}
-
-pub struct AlbumTitleAndTrack {
-    pub title: String,
-    pub track: Track,
-}
-
-impl FromModal for AlbumTitleAndTrack {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK;
-    const LABEL: &'static str = "アルバムトラック追加";
-    const REQUIRED: Required = Required::Optional;
-
-    type Input = AlbumTrackModal;
-
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        let title = input.title.to_string();
-        let duration = FancyDuration::parse(&input.length_mmss)?;
-        let authors = parse_authors(&input.authors)?;
-        let additional_authors = parse_additional_authors(&input.additional_authors);
-
-        Ok(AlbumTitleAndTrack {
-            title,
-            track: Track {
-                authors,
-                additional_authors,
-                duration,
-            },
-        })
-    }
-}
-
 #[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
 #[name = "曲の長さ入力"]
 pub struct DurationModal {
@@ -570,6 +573,7 @@ pub struct DurationModal {
     pub length_mmss: FixedString<u16>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct TrackDuration(pub FancyDuration<Duration>);
 
 impl FromModal for TrackDuration {
@@ -608,6 +612,7 @@ pub struct MemberBasicInfoModal {
     pub picture: FixedArray<Attachment, u32>,
 }
 
+#[derive(Clone, Debug)]
 pub struct MemberBasicInfo {
     pub name: String,
     pub ascii_name: String,
@@ -666,6 +671,7 @@ pub struct ExtendedMemberBasicInfoModal {
     pub entry: Option<FixedString<u16>>,
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct ExtendedMemberBasicInfo {
     pub department: Option<String>,
     pub position: Option<String>,
@@ -688,6 +694,93 @@ impl FromModal for ExtendedMemberBasicInfo {
     }
 }
 
+// from here, modals that can have multiples (sns link, track, illusts)
+//
+
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[name = "SNSリンク追加"]
+#[text_display = "マニュアル:　"]
+pub struct SnsLinksModal {
+    pub link: FixedString<u16>,
+}
+
+// from here, modals that can have multiples (sns link, track, illusts)
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[name = "SNSリンク消去"]
+#[text_display = "マニュアル:　"]
+pub struct DeleteSnsLinksModal {
+    #[name = "（必須）消去するリンクの番号"]
+    #[max_length = 2]
+    pub number: FixedString<u16>,
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct SnsLink {
+    pub url: Url,
+}
+
+impl FromListModal<8> for SnsLink {
+    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK;
+
+    const ADD_MODAL_LABEL: &'static str = "SNSリンク追加";
+
+    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK;
+
+    const REMOVE_MODAL_LABEL: &'static str = "SNSリンク消去";
+
+    const ITEM_IDS: [&'static str; 8] = [
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8,
+    ];
+
+    const INDIVIDUAL_LABEL_PREFIX: &'static str = "SNSリンク:　第";
+
+    const REQUIRED: Required = Required::Optional;
+
+    type AddOrIndividualInput = SnsLinksModal;
+
+    type DeleteInput = DeleteSnsLinksModal;
+
+    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+        Ok(SnsLink {
+            url: Url::parse(&input.link)?,
+        })
+    }
+
+    fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error> {
+        Ok(input.number.parse::<usize>()?)
+    }
+}
+
+#[derive(Clone, Debug, Modal)]
+#[name = "イラスト追加"]
+pub struct IllustrationModal {
+    #[name = "このイラストの題名"]
+    #[max_length = 50]
+    #[min_length = 1]
+    pub title: FixedString<u16>,
+    #[name = "このイラストの説明"]
+    #[max_length = 50]
+    #[min_length = 1]
+    pub description: FixedString<u16>,
+    #[file_upload]
+    #[file_types("image")]
+    #[name = "ファイル (JPG, PNG, WEBPのみ)"]
+    pub image: FixedArray<Attachment, u32>,
+    #[name = "メンバーページある作成者"]
+    #[description = "名は\",\"で分離して入力してください。英語字幕のみです。（例: mitsumori, knoeze, seeyoumayday)"]
+    pub authors: FixedString<u16>,
+    #[name = "メンバーページない作成者"]
+    #[description = "名は\",\"で分離して入力してください。（例:　リリイ・シュシュ, 金魚光線, Maurice Ravel）"]
+    pub additional_authors: FixedString<u16>,
+}
+
 #[derive(Clone, Debug, Modal)]
 #[name = "イラスト消去"]
 #[text_display = "この編集から追加したイラストを消す"]
@@ -695,6 +788,89 @@ pub struct DeleteIllustrationModal {
     #[name = "（必須）消去するイラストの番号"]
     #[max_length = 2]
     pub number: FixedString<u16>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TitleAndIllustraion {
+    pub title: String,
+    pub illustration: Illustration,
+    pub attachment: Attachment,
+}
+
+impl FromListModal<5> for TitleAndIllustraion {
+    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION;
+    const ADD_MODAL_LABEL: &'static str = "イラスト追加";
+
+    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION;
+    const REMOVE_MODAL_LABEL: &'static str = "イラスト消去";
+
+    const ITEM_IDS: [&'static str; 5] = [
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5,
+    ];
+
+    const INDIVIDUAL_LABEL_PREFIX: &'static str = "イラスト:　第";
+
+    const REQUIRED: Required = Required::Optional;
+
+    type AddOrIndividualInput = IllustrationModal;
+
+    type DeleteInput = DeleteIllustrationModal;
+
+    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+        if input.image.len() != 1 {
+            return Err(Error::msg("Needs exactly one image!"));
+        }
+
+        let attachment = input.image[0].clone();
+
+        check_attachmemt_is_picture_and_under_flimit(&attachment)?;
+
+        let illustrators = parse_authors(&input.authors)?;
+        let additional_illustrators = parse_additional_authors(&input.additional_authors);
+
+        let illustration = process_attachment(
+            &attachment,
+            illustrators,
+            additional_illustrators,
+            Some(input.description.into_string()),
+        )?;
+
+        Ok(TitleAndIllustraion {
+            title: input.title.into_string(),
+            illustration,
+            attachment,
+        })
+    }
+
+    fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error> {
+        Ok(input.number.parse::<usize>()?)
+    }
+}
+
+// album tracks
+
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[name = "アルバムトラックずつ情報"]
+pub struct AlbumTrackModal {
+    #[name = "（必須）アルバムトラック題名"]
+    #[max_length = 50]
+    #[min_length = 1]
+    pub title: FixedString<u16>,
+    #[max_length = 5]
+    #[min_length = 1]
+    #[name = "（必須）アルバムトラック長さ"]
+    #[description = "MMm SS　（例:　３分２５秒は 3m 25)"]
+    pub length_mmss: FixedString<u16>,
+    #[name = "メンバーページある作成者"]
+    #[description = "名は\",\"で分離して入力してください。空白文字は無視されます。英語字幕のみです。（例: mitsumori, knoeze)"]
+    pub authors: FixedString<u16>,
+    #[name = "メンバーページない作成者"]
+    #[description = "名は\",\"で分離して入力してください。空白文字は無視されます。（例:　リリイ・シュシュ, 金魚光線, Maurice Ravel）"]
+    pub additional_authors: FixedString<u16>,
 }
 
 #[derive(Clone, Debug, Modal)]
@@ -706,8 +882,68 @@ pub struct DeleteTrackModal {
     pub number: FixedString<u16>,
 }
 
-macro_rules! button_list_ {
-    () => {};
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct AlbumTitleAndTrack {
+    pub title: String,
+    pub track: Track,
+}
+
+impl FromListModal<20> for AlbumTitleAndTrack {
+    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK;
+    const ADD_MODAL_LABEL: &'static str = "トラック追加";
+
+    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK;
+    const REMOVE_MODAL_LABEL: &'static str = "トラック消去";
+
+    const ITEM_IDS: [&'static str; 20] = [
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
+    ];
+
+    const INDIVIDUAL_LABEL_PREFIX: &'static str = "トラック:　第";
+
+    const REQUIRED: Required = Required::Optional;
+
+    type AddOrIndividualInput = AlbumTrackModal;
+    type DeleteInput = DeleteTrackModal;
+
+    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+        let title = input.title.to_string();
+        let duration = FancyDuration::parse(&input.length_mmss)?;
+        let authors = parse_authors(&input.authors)?;
+        let additional_authors = parse_additional_authors(&input.additional_authors);
+
+        Ok(AlbumTitleAndTrack {
+            title,
+            track: Track {
+                authors,
+                additional_authors,
+                duration,
+            },
+        })
+    }
+
+    fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error> {
+        Ok(input.number.parse::<usize>()?)
+    }
 }
 
 pub async fn discard_current_work(
@@ -775,6 +1011,7 @@ pub fn create_work_components(
 
     match work_state {
         WorkStateData::Album {
+            page,
             basic_info,
             authors,
             content,
@@ -783,12 +1020,17 @@ pub fn create_work_components(
             thumbnail,
             illustrations,
             tracks,
-        } => {
-            let basic_info = match basic_info {
-                Some(_) => todo!(),
-                None => todo!(),
-            };
-        }
+        } => match page {
+            AlbumWorkStatePage::BasicInfo => {
+                let basic_info_button = basic_info.create_discord_button();
+                let authors = basic_info.create_discord_button();
+                let content = basic_info.create_discord_button();
+                let link = basic_info.create_discord_button();
+                let thumbnail = basic_info.create_discord_button();
+                let basic_info_button = basic_info.create_discord_button();
+            }
+            AlbumWorkStatePage::Tracks => todo!(),
+        },
         WorkStateData::Artist {
             artist_info,
             sns_links,
@@ -810,71 +1052,6 @@ pub fn create_work_components(
             sns_links,
             thumbnail,
         } => todo!(),
-    }
-}
-
-fn basic_info_create_action_row(work_state_data: &WorkStateData) -> CreateActionRow<'static> {
-    match work_state_data {
-        WorkStateData::Album {
-            basic_info,
-            authors,
-            content,
-            link,
-            sns_links,
-            thumbnail,
-            illustrations,
-            tracks,
-        } => CreateActionRow::Buttons(Cow::Owned(vec![
-            CreateButton::new(id_of_type(basic_info)).label(format!(
-                "{} {}",
-                required_of_type(basic_info),
-                label_of_type(basic_info)
-            )),
-            CreateButton::new(id_of_type(authors)).label(format!(
-                "{} {}",
-                required_of_type(authors),
-                label_of_type(authors)
-            )),
-            CreateButton::new(id_of_type(content)).label(format!(
-                "{} {}",
-                required_of_type(content),
-                label_of_type(content)
-            )),
-            CreateButton::new(id_of_type(sns_links)).label(format!(
-                "{} {}",
-                required_of_type(sns_links),
-                label_of_type(sns_links)
-            )),
-            CreateButton::new(id_of_type(thumbnail)).label(format!(
-                "{} {}",
-                required_of_type(thumbnail),
-                label_of_type(thumbnail)
-            )),
-        ])),
-        WorkStateData::Artist { .. } => CreateActionRow::Buttons(Cow::Owned(vec![
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ARTISTINFO)
-                .label("メンバー基本情報編集（必須）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO)
-                .label("追加メンバー情報編集（選択）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_CONTENT)
-                .label("メンバーページ内容編集（選択）"),
-        ])),
-        WorkStateData::News { .. } => CreateActionRow::Buttons(Cow::Owned(vec![
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO).label("基本情報編集（必須）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS).label("作成者情報編集（選択）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_CONTENT)
-                .label("ニュースポスト内容（選択）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL).label("サムネイル（選択）"),
-        ])),
-        WorkStateData::Song { .. } => CreateActionRow::Buttons(Cow::Owned(vec![
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO).label("基本情報編集（必須）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS).label("作成者情報編集（必須）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_DURATION).label("曲の長さ（必須）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_CONTENT)
-                .label("曲の歌詞・追加情報・説明（選択）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL).label("サムネイル（選択）"),
-            CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_LINK).label("曲の視聴リンク（選択）"),
-        ])),
     }
 }
 
