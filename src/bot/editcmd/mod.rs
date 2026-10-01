@@ -1,15 +1,15 @@
-use std::{borrow::Cow, fmt::Display, gca, sync::Arc, time::Duration};
+use std::{borrow::Cow, fmt::Display, time::Duration};
 
 use ammonia::clean;
 use anyhow::Error;
 use base64::Engine;
-use chrono::{NaiveDate, Utc};
+use chrono::NaiveDate;
 use fancy_duration::FancyDuration;
 use poise::{
     Modal,
     serenity_prelude::{
-        Attachment, ChannelId, CreateActionRow, CreateButton, CreateComponent, CreateTextDisplay,
-        EditMessage, GenericChannelId, Http, MessageId, ReactionType,
+        Attachment, CreateActionRow, CreateButton, CreateComponent, CreateMessage,
+        CreateTextDisplay, MessageId, ReactionType,
         small_fixed_array::{FixedArray, FixedString},
     },
 };
@@ -18,35 +18,33 @@ use std::fmt::Debug;
 use url::Url;
 
 use crate::{
-    bot::{
-        Data,
-        event::{
-            ZVEZDOCHKA_TICKET_COMPONENT_ARTISTINFO, ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS,
-            ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO, ZVEZDOCHKA_TICKET_COMPONENT_CANCEL_WORK,
-            ZVEZDOCHKA_TICKET_COMPONENT_CONFIRM_WORK, ZVEZDOCHKA_TICKET_COMPONENT_CONTENT,
-            ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION,
-            ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK, ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK,
-            ZVEZDOCHKA_TICKET_COMPONENT_DURATION, ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO,
-            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
-            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
-            ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
-            ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION, ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK,
-            ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
-            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
-            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
-            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
-            ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8, ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
-            ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
-        },
+    bot::event::{
+        ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_INFOPAGE, ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_TRACKSPAGE,
+        ZVEZDOCHKA_TICKET_COMPONENT_ARTISTINFO, ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS,
+        ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO, ZVEZDOCHKA_TICKET_COMPONENT_CANCEL_WORK,
+        ZVEZDOCHKA_TICKET_COMPONENT_CONFIRM_WORK, ZVEZDOCHKA_TICKET_COMPONENT_CONTENT,
+        ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION,
+        ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK, ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK,
+        ZVEZDOCHKA_TICKET_COMPONENT_DURATION, ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
+        ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION, ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK,
+        ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8, ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
     },
     site::album::{Illustration, Track},
 };
@@ -57,15 +55,45 @@ mod news;
 mod song;
 
 pub const FILE_SIZE_LIMIT_BYTES: u32 = 10485760; // 10 mb
-pub const DISCORD_MESSAGE_EXPLATINATION: &'static str = r#"
+pub const DISCORD_MESSAGE_NO_TAKEBACKSIES: &'static str = "※入力を**クリアすることはできません**。選択の入力もクリアができません。***慎重にボタンをクリックするべき***";
+pub const DISCORD_MESSAGE_FRONTMATTER: &'static str = r#"
+以下のボタンを使えばサイトのページが編集できます。
+編集作業が完成になると「編集確定」をクリックしてください。
+編集作業のキャンセルは「編集をキャンセル」をクリックしたらできます。
+
+問題があればサイト担当者に届けてください。
+"#;
+pub const DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION: &'static str = r#"
 ### 状態絵文字の説明(まだ入力がない場合):
 - ‼️: この入力は必要
 - ❗: この入力は鑑賞
 - ℹ️: この入力は選択
-### 状態絵文字の説明(まだ入力がある場合)
-- ✅: この入力は良好
-- ❌: この入力は不良
+### 状態絵文字の説明(入力がある場合)
+- 🟢: この入力は良好
+- ⛔: この入力は不良
 "#;
+pub const ALBUM_WORK_FLIP_TO_TRACKS: &'static str = "アルバムトラック編集へ";
+pub const ALBUM_WORK_FLIP_TO_INFO: &'static str = "アルバム情報編集へ";
+pub const CANCEL_WORK_LABEL: &'static str = "編集をキャンセル";
+pub const CONFIRM_WORK_LABEL: &'static str = "編集確定";
+pub const LIST_INPUT_ADD: &'static str = "追加";
+pub const LIST_INPUT_DELETE: &'static str = "追加";
+
+pub const EMOJI_GOOD: &'static str = "🟢";
+pub const EMOJI_YABAI: &'static str = "⛔";
+
+pub const EMOJI_CONFIRM: &'static str = "✅";
+pub const EMOJI_CANCEL: &'static str = "❌";
+
+pub const EMOJI_LIST_ADD: &'static str = "➕";
+pub const EMOJI_LIST_REMOVE: &'static str = "🗑️";
+
+pub const EMOJI_REQUIRED: &'static str = "‼️";
+pub const EMOJI_RECOMMENDED: &'static str = "❗";
+pub const EMOJI_OPTIONAL: &'static str = "ℹ️";
+
+pub const EMOJI_ALBUM_FLIP_TO_TRACK: &'static str = "💽";
+pub const EMOJI_ALBUM_FLIP_TO_INFO: &'static str = "📒";
 
 pub enum WorkType {
     Album,
@@ -79,6 +107,7 @@ pub struct WorkState {
     pub work_state: WorkStateData,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AlbumWorkStatePage {
     BasicInfo,
     Tracks,
@@ -119,6 +148,313 @@ pub enum WorkStateData {
     },
 }
 
+impl WorkStateData {
+    pub fn create_work_message(&self, filename: Option<&str>) -> CreateMessage<'_> {
+        let file_name_msg = match filename {
+            Some(f) => format!("## 編集するファイル名: {f}"),
+            None => format!("## 編集するファイル名: <新しいファイル>"),
+        };
+
+        let mut confirm_cancel_buttons = vec![
+            CreateButton::new(Cow::Borrowed(ZVEZDOCHKA_TICKET_COMPONENT_CONFIRM_WORK))
+                .label(CONFIRM_WORK_LABEL)
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                    EMOJI_CONFIRM,
+                ))),
+            CreateButton::new(Cow::Borrowed(ZVEZDOCHKA_TICKET_COMPONENT_CANCEL_WORK))
+                .label(CANCEL_WORK_LABEL)
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                    EMOJI_CANCEL,
+                ))),
+        ];
+
+        match &self {
+            WorkStateData::Album {
+                page,
+                basic_info,
+                authors,
+                content,
+                link,
+                sns_links,
+                thumbnail,
+                illustrations,
+                tracks,
+            } => match page {
+                AlbumWorkStatePage::BasicInfo => {
+                    let mut final_components = Vec::with_capacity(8);
+
+                    let basic_info_button = basic_info.create_discord_button();
+                    let authors_button = authors.create_discord_button();
+                    let content_button = content.create_discord_button();
+                    let link_button = link.create_discord_button();
+                    let thumbnail_button = thumbnail.create_discord_button();
+
+                    let mut sns_links_buttons = sns_links.create_button_list();
+                    let mut illustrations_buttons = illustrations.create_button_list();
+
+                    let basic_info_status = basic_info.item_status();
+                    let authors_status = authors.item_status();
+                    let content_status = content.item_status();
+                    let link_status = link.item_status();
+                    let thumbnail_status = thumbnail.item_status();
+
+                    let sns_links_status = sns_links.items_statuses();
+                    let illustrations_status = illustrations.items_statuses();
+
+                    let text_display = format!(
+                        r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{basic_info_status}
+{authors_status}
+{content_status}
+{link_status}
+{thumbnail_status}
+
+{sns_links_status}
+{illustrations_status}
+                        "#
+                    );
+
+                    confirm_cancel_buttons.push(
+                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_TRACKSPAGE)
+                            .label(Cow::Borrowed(ALBUM_WORK_FLIP_TO_TRACKS))
+                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                                EMOJI_ALBUM_FLIP_TO_TRACK,
+                            ))),
+                    );
+
+                    final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
+                        Cow::Owned(text_display),
+                    )));
+                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                        Cow::Owned(vec![
+                            basic_info_button,
+                            authors_button,
+                            content_button,
+                            link_button,
+                            thumbnail_button,
+                        ]),
+                    )));
+                    final_components.append(&mut sns_links_buttons);
+                    final_components.append(&mut illustrations_buttons);
+                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                        Cow::Owned(confirm_cancel_buttons),
+                    )));
+
+                    CreateMessage::new().components(final_components)
+                }
+                AlbumWorkStatePage::Tracks => {
+                    let mut final_components = Vec::with_capacity(8);
+                    let tracks_status = tracks.items_statuses();
+
+                    let mut tracks_buttons = tracks.create_button_list();
+
+                    let text_display = format!(
+                        r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{tracks_status}
+"#
+                    );
+
+                    confirm_cancel_buttons.push(
+                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_INFOPAGE)
+                            .label(Cow::Borrowed(ALBUM_WORK_FLIP_TO_INFO))
+                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                                EMOJI_ALBUM_FLIP_TO_INFO,
+                            ))),
+                    );
+
+                    final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
+                        Cow::Owned(text_display),
+                    )));
+                    final_components.append(&mut tracks_buttons);
+                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                        Cow::Owned(confirm_cancel_buttons),
+                    )));
+
+                    CreateMessage::new().components(final_components)
+                }
+            },
+            WorkStateData::Artist {
+                artist_info,
+                additional_artist_info,
+                sns_links,
+                content,
+            } => {
+                let mut final_components = Vec::with_capacity(5);
+
+                let artist_info_button = artist_info.create_discord_button();
+                let additional_artist_info_button = additional_artist_info.create_discord_button();
+                let content_button = content.create_discord_button();
+
+                let mut sns_links_buttons = sns_links.create_button_list();
+
+                let artist_info_status = artist_info.item_status();
+                let additional_artist_info_status = additional_artist_info.item_status();
+                let content_status = content.item_status();
+
+                let sns_links_status = sns_links.items_statuses();
+
+                let text_display = format!(
+                    r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{artist_info_status}
+{additional_artist_info_status}
+{content_status}
+{sns_links_status}
+"#
+                );
+
+                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
+                    Cow::Owned(text_display),
+                )));
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(vec![
+                        artist_info_button,
+                        additional_artist_info_button,
+                        content_button,
+                    ]),
+                )));
+                final_components.append(&mut sns_links_buttons);
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(confirm_cancel_buttons),
+                )));
+
+                CreateMessage::new().components(final_components)
+            }
+            WorkStateData::News {
+                basic_info,
+                authors,
+                content,
+                thumbnail,
+                sns_links,
+            } => {
+                let mut final_components = Vec::with_capacity(5);
+
+                let basic_info_button = basic_info.create_discord_button();
+                let authors_button = authors.create_discord_button();
+                let content_button = content.create_discord_button();
+                let thumbnail_button = thumbnail.create_discord_button();
+
+                let mut sns_links_buttons = sns_links.create_button_list();
+
+                let basic_info_status = basic_info.item_status();
+                let authors_status = authors.item_status();
+                let content_status = content.item_status();
+                let thumbnail_status = thumbnail.item_status();
+
+                let sns_links_status = sns_links.items_statuses();
+
+                let text_display = format!(
+                    r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{basic_info_status}
+{authors_status}
+{content_status}
+{thumbnail_status}
+{sns_links_status}
+"#
+                );
+
+                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
+                    Cow::Owned(text_display),
+                )));
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(vec![
+                        basic_info_button,
+                        authors_button,
+                        content_button,
+                        thumbnail_button,
+                    ]),
+                )));
+                final_components.append(&mut sns_links_buttons);
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(confirm_cancel_buttons),
+                )));
+
+                CreateMessage::new().components(final_components)
+            }
+            WorkStateData::Song {
+                basic_info,
+                authors,
+                duration,
+                content,
+                thumbnail,
+                sns_links,
+            } => {
+                let mut final_components = Vec::with_capacity(5);
+
+                let basic_info_button = basic_info.create_discord_button();
+                let authors_button = authors.create_discord_button();
+                let content_button = content.create_discord_button();
+                let duration_button = duration.create_discord_button();
+                let thumbnail_button = thumbnail.create_discord_button();
+
+                let mut sns_links_buttons = sns_links.create_button_list();
+
+                let basic_info_status = basic_info.item_status();
+                let authors_status = authors.item_status();
+                let content_status = content.item_status();
+                let duration_status = duration.item_status();
+                let thumbnail_status = thumbnail.item_status();
+
+                let sns_links_status = sns_links.items_statuses();
+
+                let text_display = format!(
+                    r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{basic_info_status}
+{authors_status}
+{content_status}
+{thumbnail_status}
+{duration_status}
+{sns_links_status}
+"#
+                );
+
+                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
+                    Cow::Owned(text_display),
+                )));
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(vec![
+                        basic_info_button,
+                        authors_button,
+                        content_button,
+                        thumbnail_button,
+                        duration_button,
+                    ]),
+                )));
+                final_components.append(&mut sns_links_buttons);
+                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+                    Cow::Owned(confirm_cancel_buttons),
+                )));
+
+                CreateMessage::new().components(final_components)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ModalWrapper<T>
 where
@@ -154,12 +490,12 @@ where
     pub fn create_discord_button(&self) -> CreateButton<'static> {
         let status = match &self {
             ModalWrapper::Unset => match Self::required() {
-                Required::Yes => "‼️",
-                Required::Recommended => "❗",
-                Required::Optional => "ℹ️",
+                Required::Yes => EMOJI_REQUIRED,
+                Required::Recommended => EMOJI_OPTIONAL,
+                Required::Optional => EMOJI_OPTIONAL,
             },
-            ModalWrapper::Ok { .. } => "✅",
-            ModalWrapper::Bad { .. } => "❌",
+            ModalWrapper::Ok { .. } => EMOJI_GOOD,
+            ModalWrapper::Bad { .. } => EMOJI_YABAI,
         };
 
         CreateButton::new(Cow::Borrowed(Self::id()))
@@ -171,19 +507,29 @@ where
 
     pub fn item_status(&self) -> String {
         let status = match &self {
-            ModalWrapper::Unset => "未定義値(ご入力おねがいします)".to_string(),
+            ModalWrapper::Unset => "未定義値".to_string(),
             ModalWrapper::Ok { .. } => "良好".to_string(),
             ModalWrapper::Bad { error, .. } => format!("エラーが発生しました: {:?}", error),
         };
 
         format!(
             r#"
-- {}の状態: {}のアイテム、今は{}
+- {}: {}
             "#,
             Self::label(),
-            Self::required(),
             status
         )
+    }
+
+    pub fn is_ok(&self) -> bool {
+        match self {
+            ModalWrapper::Unset => match Self::required() {
+                Required::Yes => false,
+                Required::Recommended | Required::Optional => true,
+            },
+            ModalWrapper::Ok { .. } => true,
+            ModalWrapper::Bad { .. } => false,
+        }
     }
 }
 
@@ -202,26 +548,20 @@ where
     pub fn add_id() -> &'static str {
         T::ADD_MODAL_ID
     }
-    pub fn add_label() -> &'static str {
-        T::ADD_MODAL_LABEL
-    }
     pub fn remove_id() -> &'static str {
         T::REMOVE_MODAL_ID
-    }
-    pub fn remove_label() -> &'static str {
-        T::REMOVE_MODAL_LABEL
     }
     pub fn item_ids() -> &'static [&'static str; N] {
         &T::ITEM_IDS
     }
     pub fn individual_label() -> &'static str {
-        T::INDIVIDUAL_LABEL_PREFIX
+        T::INDIVIDUAL_LABEL
     }
     pub fn required() -> Required {
         T::REQUIRED
     }
 
-    pub fn create_button_list(&self) -> Vec<CreateActionRow<'_>> {
+    pub fn create_button_list(&self) -> Vec<CreateComponent<'_>> {
         let items_iter = self.items.iter();
         let item_ids = Self::item_ids().iter();
         let all_buttons = items_iter
@@ -230,18 +570,22 @@ where
             .map(|(index, (item, id))| match item {
                 Ok(_) => CreateButton::new(Cow::Borrowed(*id))
                     .label(Cow::Owned(format!(
-                        "{}{}",
+                        "{} #{}",
                         Self::individual_label(),
                         index + 1
                     )))
-                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc("✅"))),
+                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                        EMOJI_GOOD,
+                    ))),
                 Err(_) => CreateButton::new(Cow::Borrowed(*id))
                     .label(Cow::Owned(format!(
-                        "{}{}",
+                        "{} #{}",
                         Self::individual_label(),
                         index + 1
                     )))
-                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc("❌"))),
+                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                        EMOJI_YABAI,
+                    ))),
             })
             .collect::<Vec<CreateButton<'_>>>();
 
@@ -249,21 +593,59 @@ where
         // we split the buttons into multiple rows of buttons
         let mut list_of_multiple_buttons = all_buttons
             .chunks(5)
-            .map(|chubks| CreateActionRow::Buttons(Cow::Owned(chubks.to_vec())))
-            .collect::<Vec<CreateActionRow<'_>>>();
+            .map(|chubks| {
+                CreateComponent::ActionRow(CreateActionRow::Buttons(Cow::Owned(chubks.to_vec())))
+            })
+            .collect::<Vec<CreateComponent<'_>>>();
 
         // _shakes fist_ if only create button fns were const...
         let default_buttons = CreateActionRow::Buttons(Cow::Owned(vec![
             CreateButton::new(Cow::Borrowed(Self::add_id()))
-                .label(Cow::Borrowed(Self::add_label()))
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc("➕"))),
+                .label(Cow::Owned(format!(
+                    "{}{}",
+                    Self::individual_label(),
+                    LIST_INPUT_ADD
+                )))
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                    EMOJI_LIST_ADD,
+                ))),
             CreateButton::new(Cow::Borrowed(Self::remove_id()))
-                .label(Cow::Borrowed(Self::remove_label()))
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc("🗑️"))),
+                .label(Cow::Owned(format!(
+                    "{}{}",
+                    Self::individual_label(),
+                    LIST_INPUT_DELETE
+                )))
+                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
+                    EMOJI_LIST_REMOVE,
+                ))),
         ]));
 
-        list_of_multiple_buttons.push(default_buttons);
+        list_of_multiple_buttons.push(CreateComponent::ActionRow(default_buttons));
         list_of_multiple_buttons
+    }
+
+    pub fn items_statuses(&self) -> String {
+        if self.items.is_empty() {
+            return format!("現在、{}がありません", Self::individual_label());
+        }
+
+        self.items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let status = match item {
+                    Ok(_) => "良好".to_string(),
+                    Err(err) => format!("エラーが発生しました: {err}"),
+                };
+
+                format!(
+                    "- {} #{}: {}\n",
+                    Self::individual_label(),
+                    index + 1,
+                    status
+                )
+            })
+            .collect::<String>()
     }
 }
 
@@ -297,11 +679,9 @@ trait FromModal: Sized + Clone + Debug {
 
 trait FromListModal<const MAX_ITEMS: usize>: Sized + Clone + Debug {
     const ADD_MODAL_ID: &'static str;
-    const ADD_MODAL_LABEL: &'static str;
     const REMOVE_MODAL_ID: &'static str;
-    const REMOVE_MODAL_LABEL: &'static str;
     const ITEM_IDS: [&'static str; MAX_ITEMS];
-    const INDIVIDUAL_LABEL_PREFIX: &'static str;
+    const INDIVIDUAL_LABEL: &'static str;
     const REQUIRED: Required;
 
     type AddOrIndividualInput: Modal;
@@ -718,11 +1098,7 @@ pub struct SnsLink {
 impl FromListModal<8> for SnsLink {
     const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK;
 
-    const ADD_MODAL_LABEL: &'static str = "SNSリンク追加";
-
     const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK;
-
-    const REMOVE_MODAL_LABEL: &'static str = "SNSリンク消去";
 
     const ITEM_IDS: [&'static str; 8] = [
         ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
@@ -734,8 +1110,7 @@ impl FromListModal<8> for SnsLink {
         ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
         ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8,
     ];
-
-    const INDIVIDUAL_LABEL_PREFIX: &'static str = "SNSリンク:　第";
+    const INDIVIDUAL_LABEL: &'static str = "SNSリンク";
 
     const REQUIRED: Required = Required::Optional;
 
@@ -795,10 +1170,8 @@ pub struct TitleAndIllustraion {
 
 impl FromListModal<5> for TitleAndIllustraion {
     const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION;
-    const ADD_MODAL_LABEL: &'static str = "イラスト追加";
 
     const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION;
-    const REMOVE_MODAL_LABEL: &'static str = "イラスト消去";
 
     const ITEM_IDS: [&'static str; 5] = [
         ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1,
@@ -808,7 +1181,7 @@ impl FromListModal<5> for TitleAndIllustraion {
         ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5,
     ];
 
-    const INDIVIDUAL_LABEL_PREFIX: &'static str = "イラスト:　第";
+    const INDIVIDUAL_LABEL: &'static str = "イラスト";
 
     const REQUIRED: Required = Required::Optional;
 
@@ -886,10 +1259,8 @@ pub struct AlbumTitleAndTrack {
 
 impl FromListModal<20> for AlbumTitleAndTrack {
     const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK;
-    const ADD_MODAL_LABEL: &'static str = "トラック追加";
 
     const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK;
-    const REMOVE_MODAL_LABEL: &'static str = "トラック消去";
 
     const ITEM_IDS: [&'static str; 20] = [
         ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1,
@@ -914,7 +1285,7 @@ impl FromListModal<20> for AlbumTitleAndTrack {
         ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
     ];
 
-    const INDIVIDUAL_LABEL_PREFIX: &'static str = "トラック:　第";
+    const INDIVIDUAL_LABEL: &'static str = "トラック";
 
     const REQUIRED: Required = Required::Optional;
 
