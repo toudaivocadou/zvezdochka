@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Error;
 use poise::FrameworkContext;
-use poise::serenity_prelude::all::{ComponentInteraction, Context, FullEvent, Interaction};
+use poise::serenity_prelude::all::{Context, FullEvent, Interaction};
 use poise::serenity_prelude::{CacheHttp, CreateMessage, EditMessage};
 
 use crate::bot::Data;

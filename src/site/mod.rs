@@ -11,7 +11,7 @@ use crate::site::templates::functions::sns::jinja_sns_icon;
 use crate::site::templates::index::index;
 use crate::site::templates::join::join_vocadou;
 use crate::site::templates::members::{member_detail, member_index};
-use crate::site::templates::news::{NEWS_MISSING_AUTHOR, news_detail, news_index};
+use crate::site::templates::news::{news_detail, news_index};
 use crate::site::templates::partials::navbar::Sections;
 use crate::site::templates::works::{album_detail, work_album_index, work_detail};
 use crate::site::util::{BuildSteps, MajorContext, SubBuildStep, reference, render_markdown};
@@ -44,7 +44,21 @@ pub mod templates;
 pub mod util;
 pub mod work;
 
-pub const FRONT_MATTER_SPLIT: &str = "===";
+pub const FRONT_MATTER_SPLIT: &str = "---";
+pub const JPEG_GLOB: &'static str = "images/**/*.jpeg";
+pub const JPG_GLOB: &'static str = "images/**/*.jpg";
+pub const PNG_GLOB: &'static str = "images/**/*.png";
+pub const AVIF_GLOB: &'static str = "images/**/*.avif";
+pub const GIF_GLOB: &'static str = "images/**/*.gif";
+pub const WEBP_GLOB: &'static str = "images/**/*.webp";
+
+pub const JS_GLOB: &'static str = "js/*.js";
+pub const CSS_GLOB: &'static str = "styles/*.css";
+
+pub const NEWS_GLOB: &'static str = "news/**/*.md";
+pub const ALBUM_GLOB: &'static str = "albums/**/*.md";
+pub const WORK_GLOB: &'static str = "works/**/*.md";
+pub const MEMBER_GLOB: &'static str = "members/**/*.md";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BuildData {
@@ -116,21 +130,22 @@ pub fn buildsite(
 
     let styles = config
         .load_css()
-        .entry(format!("{}/styles/*.css", &site_data.source_path))?
+        .entry(format!("{}/{CSS_GLOB}", &site_data.source_path))?
         .register();
 
     let images = config
         .load_images()
-        .glob(format!("{}/images/**/*.png", &site_data.source_path))?
-        .glob(format!("{}/images/**/*.jpg", &site_data.source_path))?
-        .glob(format!("{}/images/**/*.jpeg", &site_data.source_path))?
-        .glob(format!("{}/images/**/*.avif", &site_data.source_path))?
-        .glob(format!("{}/images/**/*.gif", &site_data.source_path))?
+        .glob(format!("{}/{PNG_GLOB}", &site_data.source_path))?
+        .glob(format!("{}/{JPEG_GLOB}", &site_data.source_path))?
+        .glob(format!("{}/{JPG_GLOB}", &site_data.source_path))?
+        .glob(format!("{}/{AVIF_GLOB}", &site_data.source_path))?
+        .glob(format!("{}/{GIF_GLOB}", &site_data.source_path))?
+        .glob(format!("{}/{WEBP_GLOB}", &site_data.source_path))?
         .register();
 
     let scripts = config
         .load_esbuild()
-        .entry(format!("{}/js/*.js", &site_data.source_path))?
+        .entry(format!("{}/{JS_GLOB}", &site_data.source_path))?
         .bundle(true)
         .minify(true)
         .register();
@@ -151,22 +166,22 @@ pub fn buildsite(
 
     let members = config
         .load_documents::<MemberMeta>()
-        .glob(format!("{}/members/**/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/{MEMBER_GLOB}", &site_data.source_path))?
         .register();
 
     let works = config
         .load_documents::<WorkMeta>()
-        .glob(format!("{}/works/**/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/{WORK_GLOB}", &site_data.source_path))?
         .register();
 
     let albums = config
         .load_documents::<AlbumMeta>()
-        .glob(format!("{}/albums/**/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/{ALBUM_GLOB}", &site_data.source_path))?
         .register();
 
     let news = config
         .load_documents::<NewsMeta>()
-        .glob(format!("{}/news/**/[!_]*.md", &site_data.source_path))?
+        .glob(format!("{}/{NEWS_GLOB}", &site_data.source_path))?
         .register();
 
     // let events = config.load_documents().register();
@@ -232,7 +247,7 @@ pub fn buildsite(
             }
 
             for (_, post) in news.iter() {
-                if let Some(author) = &post.matter.author {
+                for author in &post.matter.authors {
                     if !members.contains_key(author) {
                         should_error = true;
                         error!("Sitemap: ニュース`{}`で投稿者`{}`を見つけませんでした。サイトで登録していない投稿者は`additional_authors`欄に入力してください。", post.matter.title, author)
@@ -379,13 +394,8 @@ pub fn buildsite(
 
                 let path = reference(
                     &news.matter.title,
-                    &[&news
-                        .matter
-                        .author
-                        .as_ref()
-                        .map(|x| x.as_str())
-                        .unwrap_or(NEWS_MISSING_AUTHOR)],
-                    &[],
+                    &news.matter.authors,
+                    &news.matter.additional_authors,
                 );
 
                 let trackers = TrackerSet {

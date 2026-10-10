@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS tickets(
     created_by INTEGER NOT NULL,
     created_on_tsec INTEGER NOT NULL,
 
+    state TEXT NOT NULL,
     start_commit BLOB,
     path TEXT,
-    status TEXT NOT NULL,
-
+    data BLOB, -- JSONB
 
     FOREIGN KEY (created_by) REFERENCES discord_to_artist(discord_id)
         ON UPDATE CASCADE

@@ -2,10 +2,11 @@ use dashmap::DashMap;
 use octocrab::Octocrab;
 use poise::serenity_prelude::ChannelId;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
 use std::{path::PathBuf, sync::Arc};
+use tokio::sync::Mutex;
 
-use crate::bot::{editcmd::WorkState, sql::Sql};
+use crate::bot::sql::Sql;
+use crate::bot::work::Work;
 
 mod commands;
 mod editcmd;
@@ -14,6 +15,7 @@ mod git_actions;
 mod preview;
 mod sql;
 mod ticket;
+mod work;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GitConfig {
@@ -52,7 +54,7 @@ pub struct Data {
     pub config: Config,
     pub database: Sql,
     pub shhh: Secrets,
-    pub work_states: DashMap<ChannelId, Arc<Mutex<WorkState>>>,
+    pub work_states: DashMap<ChannelId, Arc<Mutex<Work>>>,
 }
 
 pub async fn start_bot() {}
