@@ -35,6 +35,7 @@ image = "0.25.10"
 bandcamp = "0.3.4"
 glob = "0.3.4"
 serde_yaml = "0.8"
+reqwest = { version = "0.13", features = ["json", "http2", "multipart"] }
 
 [dependencies.tokio]
 version = "1.53.1"
@@ -45,7 +46,7 @@ version = "2.5.8"
 features = ["serde"]
 
 [dependencies.hauchiwa]
-version = "0.20.0"
+version = "0.22.0"
 features = ["tokio", "grass", "image", "server", "sitemap", "pagefind", "logging"]
 
 [dependencies.minijinja]
@@ -88,7 +89,3 @@ features = [
     "derive",
     "tls-rustls-ring-webpki",
 ]
-
-[dependencies.process-wrap]
-version = "9.1.0"
-features = ["tokio1", "std", "kill-on-drop"]

@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt::Display, time::Duration};
+use std::{borrow::Cow, fmt::Display, sync::Arc, time::Duration};
 
 use ammonia::clean;
 use anyhow::Error;
@@ -16,6 +16,7 @@ use poise::{
 };
 use pulldown_cmark::{Event, Options, Parser};
 use std::fmt::Debug;
+use tokio::sync::Mutex;
 use url::Url;
 
 use crate::{
@@ -31,23 +32,27 @@ use crate::{
         ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
         ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
         ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION, ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK,
-        ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8, ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
+        ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK_INDEXED,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6,
+        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8,
+        ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19,
+        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
     },
-    site::album::{Illustration, Track},
+    site::{
+        album::{Illustration, Track},
+        namemap::NameMap,
+    },
 };
 
 pub const FILE_SIZE_LIMIT_BYTES: u32 = 10485760; // 10 mb
@@ -93,7 +98,8 @@ pub const EMOJI_ALBUM_FLIP_TO_INFO: &'static str = "📒";
 
 pub struct Work {
     pub directory: Utf8PathBuf,
-    pub work_state: WorkState,
+    pub name_map: NameMap,
+    pub work_state: Arc<Mutex<WorkState>>,
 }
 
 pub enum WorkState {
@@ -108,6 +114,12 @@ pub enum WorkState {
 pub enum AlbumWorkStatePage {
     BasicInfo,
     Tracks,
+}
+
+pub fn preparing_work_component() -> Cow<'static, [CreateComponent<'static>]> {
+    Cow::Owned(vec![CreateComponent::TextDisplay(CreateTextDisplay::new(
+        Cow::Borrowed("作業準備中...少々お待ち下さい..."),
+    ))])
 }
 
 pub enum WorkData {
@@ -146,7 +158,7 @@ pub enum WorkData {
 }
 
 impl WorkData {
-    pub fn create_work_message(&self, filename: Option<&str>) -> Vec<CreateComponent<'_>> {
+    pub fn create_components(&self, filename: Option<&str>) -> Vec<CreateComponent<'_>> {
         let file_name_msg = match filename {
             Some(f) => format!("## 編集するファイル名: {f}"),
             None => format!("## 編集するファイル名: <新しいファイル>"),
@@ -261,6 +273,11 @@ impl WorkData {
 "#
                     );
 
+                    confirm_cancel_buttons.push(
+                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK_INDEXED)
+                            .label(Cow::Borrowed("番号にトラックを入れ"))
+                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("🔢"))),
+                    );
                     confirm_cancel_buttons.push(
                         CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_INFOPAGE)
                             .label(Cow::Borrowed(ALBUM_WORK_FLIP_TO_INFO))
@@ -459,7 +476,7 @@ where
 {
     Unset,
     Ok {
-        input: T::Input,
+        input: Option<T::Input>,
         value: T,
     },
     Bad {
@@ -530,6 +547,15 @@ where
     }
 }
 
+impl<T> Default for ModalWrapper<T>
+where
+    T: FromModal,
+{
+    fn default() -> Self {
+        ModalWrapper::Unset
+    }
+}
+
 pub struct ModalListWrapper<T, const N: usize>
 where
     T: FromListModal<N>,
@@ -556,6 +582,20 @@ where
     }
     pub fn required() -> Required {
         T::REQUIRED
+    }
+
+    pub fn new(values: Vec<T>) -> Result<Self, Error> {
+        if values.len() > N {
+            return Err(Error::msg("Contract Violation - Too many values!"));
+        }
+
+        let prev_values: Vec<Option<T::AddOrIndividualInput>> =
+            Vec::from_fn(values.len(), |_| None);
+
+        Ok(Self {
+            items: values.into_iter().map(|x| Ok(x)).collect(),
+            previous_inputs: prev_values,
+        })
     }
 
     pub fn create_button_list(&self) -> Vec<CreateComponent<'_>> {
@@ -646,6 +686,18 @@ where
     }
 }
 
+impl<T, const N: usize> Default for ModalListWrapper<T, N>
+where
+    T: FromListModal<N>,
+{
+    fn default() -> Self {
+        Self {
+            items: vec![],
+            previous_inputs: vec![],
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Required {
     Yes,
@@ -672,6 +724,8 @@ trait FromModal: Sized + Clone + Debug {
     type Input: Modal;
 
     fn parse(input: Self::Input) -> Result<Self, Error>;
+
+    fn to_input(&self) -> Result<Self::Input, Error>;
 }
 
 trait FromListModal<const MAX_ITEMS: usize>: Sized + Clone + Debug {
@@ -740,6 +794,14 @@ impl FromModal for BasicInfo {
             short_description: input.short.into_string(),
             date,
         })
+    }
+
+    fn to_input(&self) -> Result<Self::Input, Error> {
+        BasicInfoModal {
+            title: todo!(),
+            short: todo!(),
+            date: todo!(),
+        }
     }
 }
 
@@ -877,7 +939,7 @@ pub struct ThumbnailModal {
 #[derive(Clone, Debug)]
 pub struct Thumbnail {
     pub illustration: Illustration,
-    pub attachment: Attachment,
+    pub attachment: Option<Attachment>,
 }
 
 impl FromModal for Thumbnail {

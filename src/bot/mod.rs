@@ -54,7 +54,7 @@ pub struct Data {
     pub config: Config,
     pub database: Sql,
     pub shhh: Secrets,
-    pub work_states: DashMap<ChannelId, Arc<Mutex<Work>>>,
+    pub work_states: DashMap<ChannelId, Work>,
 }
 
 pub async fn start_bot() {}
