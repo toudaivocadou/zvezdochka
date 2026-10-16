@@ -139,7 +139,7 @@ pub async fn watch_for_open_ticket(
                 let message = channel
                     .send_message(
                         context.http(),
-                        CreateMessage::new().content("サイトプレビューをけんちくしています。"),
+                        CreateMessage::new().content("サイトプレビューを準備しています。"),
                     )
                     .await?;
                 run_site_build(data.clone(), channel.id.get()).await?;

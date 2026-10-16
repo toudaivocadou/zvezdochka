@@ -2,8 +2,7 @@ use dashmap::DashMap;
 use octocrab::Octocrab;
 use poise::serenity_prelude::ChannelId;
 use serde::{Deserialize, Serialize};
-use std::{path::PathBuf, sync::Arc};
-use tokio::sync::Mutex;
+use std::path::PathBuf;
 
 use crate::bot::sql::Sql;
 use crate::bot::work::Work;

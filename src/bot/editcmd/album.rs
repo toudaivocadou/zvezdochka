@@ -6,10 +6,7 @@ use poise::{
     serenity_prelude::{ChannelId, MessageFlags},
 };
 use std::{collections::HashSet, time::Duration};
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::{fs::File, io::AsyncReadExt};
 use url::Url;
 
 use crate::{
@@ -19,8 +16,8 @@ use crate::{
             ERR_MSG_ONLY_WORK_CHANNEL, ERR_WORK_MUTEX_LOCK, glob_files, split_file_str,
         },
         work::{
-            AlbumTitleAndTrack, AlbumWorkStatePage, Authors, BasicInfo, MainLink, ModalListWrapper,
-            ModalWrapper, Thumbnail, WorkData, WorkState,
+            AlbumTitleAndTrack, AlbumWorkStatePage, AttachmentOrDownloadURL, Authors, BasicInfo,
+            MainLink, ModalListWrapper, ModalWrapper, Thumbnail, WorkData, WorkState,
         },
     },
     site::{
@@ -354,41 +351,41 @@ pub async fn from_bandcamp(
 
             // get thumbnail and save to work
 
-            let thumbnail = match album_data.image.get_url() {
+            let (thumbnail, destname, url) = match album_data.image.get_url() {
                 Some(url) => {
                     let parsed_url = Url::parse(&url)?;
                     let url_path = parsed_url.to_file_path().map_err(|_| {
                         Error::msg("あ。。。。　あの。。。　あ。。。　あの。。。　ヤバすぎ。。。")
                     })?;
-                    let (destination_file_path, destionation_file_name) =
-                        match url_path.into_iter().last() {
-                            Some(a) => (
-                                format!("{}/{}", work.directory.as_str(), a.to_string_lossy()),
-                                a.to_string_lossy(),
-                            ),
-                            None => return Err(Error::msg("No filename in path - this is bad!")),
-                        };
+                    let destionation_file_name = match url_path.into_iter().last() {
+                        Some(a) => a.to_string_lossy(),
+                        None => return Err(Error::msg("No filename in path - this is bad!")),
+                    };
 
-                    match reqwest::get(url).await?.error_for_status() {
-                        Ok(req) => {
-                            let mut new_file =
-                                tokio::fs::File::create(destination_file_path).await?;
-                            new_file.write_all(&req.bytes().await?).await?;
-                        }
-                        Err(why) => {
-                            return Err(Error::msg(
-                                "バンドキャンプからサムネイルのダウンロードが失敗しました",
-                            )
-                            .context(why));
-                        }
-                    }
+                    // match reqwest::get(url).await?.error_for_status() {
+                    //     Ok(req) => {
+                    //         let mut new_file =
+                    //             tokio::fs::File::create(destination_file_path).await?;
+                    //         new_file.write_all(&req.bytes().await?).await?;
+                    //     }
+                    //     Err(why) => {
+                    //         return Err(Error::msg(
+                    //             "バンドキャンプからサムネイルのダウンロードが失敗しました",
+                    //         )
+                    //         .context(why));
+                    //     }
+                    // }
 
-                    Illustration {
-                        image: destionation_file_name.to_string(),
-                        illustrators: vec![],
-                        additional_illustrators: vec![],
-                        description: None,
-                    }
+                    (
+                        Illustration {
+                            image: destionation_file_name.to_string(),
+                            illustrators: vec![],
+                            additional_illustrators: vec![],
+                            description: None,
+                        },
+                        destionation_file_name.to_string(),
+                        parsed_url,
+                    )
                 }
                 None => {
                     return Err(Error::msg(
@@ -399,34 +396,25 @@ pub async fn from_bandcamp(
 
             let workdata = WorkData::Album {
                 page: AlbumWorkStatePage::BasicInfo,
-                basic_info: ModalWrapper::Ok {
-                    input: None,
-                    value: BasicInfo {
-                        title: album_title,
-                        short_description: album_short,
-                        date: album_date,
-                    },
-                },
-                authors: ModalWrapper::Ok {
-                    input: None,
-                    value: Authors {
-                        authors: authors.into_iter().collect(),
-                        additional_authors: additional_authors.into_iter().collect(),
-                    },
-                },
+                basic_info: ModalWrapper::InitWithValue(BasicInfo {
+                    title: album_title,
+                    short_description: album_short,
+                    date: album_date,
+                }),
+                authors: ModalWrapper::InitWithValue(Authors {
+                    authors: authors.into_iter().collect(),
+                    additional_authors: additional_authors.into_iter().collect(),
+                }),
                 content: ModalWrapper::Unset,
-                link: ModalWrapper::Ok {
-                    input: None,
-                    value: MainLink { url: album_link },
-                },
+                link: ModalWrapper::InitWithValue(MainLink { url: album_link }),
                 sns_links: ModalListWrapper::default(),
-                thumbnail: ModalWrapper::Ok {
-                    input: None,
-                    value: Thumbnail {
-                        illustration: thumbnail,
-                        attachment: None,
+                thumbnail: ModalWrapper::InitWithValue(Thumbnail {
+                    illustration: thumbnail,
+                    attachment: AttachmentOrDownloadURL::DownloadURL {
+                        destination_filename: destname,
+                        source_url: url,
                     },
-                },
+                }),
                 illustrations: ModalListWrapper::default(),
                 tracks: ModalListWrapper::new(tracks)?,
             };

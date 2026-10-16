@@ -6,11 +6,7 @@ use glob::{GlobError, glob};
 use indexmap::IndexMap;
 use tokio::io::AsyncReadExt;
 
-use crate::site::{
-    FRONT_MATTER_SPLIT, MEMBER_GLOB,
-    member::MemberMeta,
-    namemap::{MemberRef, NameMap},
-};
+use crate::site::{FRONT_MATTER_SPLIT, MEMBER_GLOB, member::MemberMeta, namemap::NameMap};
 
 pub const ERR_MSG_ONLY_WORK_CHANNEL: &'static str =
     "このコマンドは作業チャネルでのみ実行ができます。";

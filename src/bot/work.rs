@@ -71,6 +71,7 @@ pub const DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION: &'static str = r#"
 - ℹ️: この入力は選択
 ### 状態絵文字の説明(入力がある場合)
 - 🟢: この入力は良好
+- 👁️: この入力をご確認してください
 - ⛔: この入力は不良
 "#;
 pub const ALBUM_WORK_FLIP_TO_TRACKS: &'static str = "アルバムトラック編集へ";
@@ -82,6 +83,7 @@ pub const LIST_INPUT_DELETE: &'static str = "追加";
 
 pub const EMOJI_GOOD: &'static str = "🟢";
 pub const EMOJI_YABAI: &'static str = "⛔";
+pub const EMOJI_CHECK: &'static str = "👁️";
 
 pub const EMOJI_CONFIRM: &'static str = "✅";
 pub const EMOJI_CANCEL: &'static str = "❌";
@@ -107,6 +109,15 @@ pub enum WorkState {
     Working {
         message_id: MessageId,
         data: Box<WorkData>,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub enum AttachmentOrDownloadURL {
+    Attachment(Attachment),
+    DownloadURL {
+        destination_filename: String,
+        source_url: Url,
     },
 }
 
@@ -475,8 +486,9 @@ where
     T: FromModal,
 {
     Unset,
+    InitWithValue(T),
     Ok {
-        input: Option<T::Input>,
+        input: T::Input,
         value: T,
     },
     Bad {
@@ -510,6 +522,7 @@ where
             },
             ModalWrapper::Ok { .. } => EMOJI_GOOD,
             ModalWrapper::Bad { .. } => EMOJI_YABAI,
+            ModalWrapper::InitWithValue(_) => EMOJI_CHECK,
         };
 
         CreateButton::new(Cow::Borrowed(Self::id()))
@@ -524,6 +537,7 @@ where
             ModalWrapper::Unset => "未定義値".to_string(),
             ModalWrapper::Ok { .. } => "良好".to_string(),
             ModalWrapper::Bad { error, .. } => format!("エラーが発生しました: {:?}", error),
+            ModalWrapper::InitWithValue(_) => "確認してください".to_string(),
         };
 
         format!(
@@ -543,6 +557,7 @@ where
             },
             ModalWrapper::Ok { .. } => true,
             ModalWrapper::Bad { .. } => false,
+            ModalWrapper::InitWithValue(_) => true,
         }
     }
 }
@@ -725,7 +740,7 @@ trait FromModal: Sized + Clone + Debug {
 
     fn parse(input: Self::Input) -> Result<Self, Error>;
 
-    fn to_input(&self) -> Result<Self::Input, Error>;
+    fn to_input(&self) -> Self::Input;
 }
 
 trait FromListModal<const MAX_ITEMS: usize>: Sized + Clone + Debug {
@@ -796,11 +811,11 @@ impl FromModal for BasicInfo {
         })
     }
 
-    fn to_input(&self) -> Result<Self::Input, Error> {
+    fn to_input(&self) -> Self::Input {
         BasicInfoModal {
-            title: todo!(),
-            short: todo!(),
-            date: todo!(),
+            title: FixedString::from_str_trunc(&self.title),
+            short: FixedString::from_str_trunc(&self.short_description),
+            date: FixedString::from_string_trunc(self.date.to_string()),
         }
     }
 }
@@ -858,6 +873,15 @@ impl FromModal for Authors {
             additional_authors,
         })
     }
+
+    fn to_input(&self) -> Self::Input {
+        AuthorsModal {
+            authors: FixedString::from_string_trunc(self.authors.join(", ").to_string()),
+            additional_authors: FixedString::from_string_trunc(
+                self.additional_authors.join(", ").to_string(),
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
@@ -891,6 +915,12 @@ impl FromModal for PageContent {
         }
         Err(Error::msg("Bad Markdown"))
     }
+
+    fn to_input(&self) -> Self::Input {
+        PageContentModal {
+            content: FixedString::from_str_trunc(&self.content),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
@@ -918,6 +948,12 @@ impl FromModal for MainLink {
             url: Url::parse(&input.link)?,
         })
     }
+
+    fn to_input(&self) -> Self::Input {
+        MainLinkModal {
+            link: FixedString::from_str_trunc(self.url.as_str()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Modal)]
@@ -939,7 +975,7 @@ pub struct ThumbnailModal {
 #[derive(Clone, Debug)]
 pub struct Thumbnail {
     pub illustration: Illustration,
-    pub attachment: Option<Attachment>,
+    pub attachment: AttachmentOrDownloadURL,
 }
 
 impl FromModal for Thumbnail {
@@ -970,8 +1006,30 @@ impl FromModal for Thumbnail {
 
         Ok(Thumbnail {
             illustration,
-            attachment,
+            attachment: AttachmentOrDownloadURL::Attachment(attachment),
         })
+    }
+
+    fn to_input(&self) -> Self::Input {
+        let attachmemt = match &self.attachment {
+            AttachmentOrDownloadURL::Attachment(attachment) => {
+                FixedArray::from_vec_trunc(vec![attachment.clone()])
+            }
+            AttachmentOrDownloadURL::DownloadURL { .. } => FixedArray::new(),
+        };
+
+        ThumbnailModal {
+            image: attachmemt,
+            authors: FixedString::from_string_trunc(
+                self.illustration.illustrators.join(", ").to_string(),
+            ),
+            additional_authors: FixedString::from_string_trunc(
+                self.illustration
+                    .additional_illustrators
+                    .join(", ")
+                    .to_string(),
+            ),
+        }
     }
 }
 
@@ -1021,6 +1079,12 @@ impl FromModal for TrackDuration {
     fn parse(input: Self::Input) -> Result<Self, Error> {
         Ok(TrackDuration(FancyDuration::parse(&input.length_mmss)?))
     }
+
+    fn to_input(&self) -> Self::Input {
+        DurationModal {
+            length_mmss: FixedString::from_string_trunc(self.0.to_string()),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Modal)]
@@ -1052,7 +1116,7 @@ pub struct MemberBasicInfo {
     pub name: String,
     pub ascii_name: String,
     pub short: String,
-    pub picture: Attachment,
+    pub picture: AttachmentOrDownloadURL,
 }
 
 impl FromModal for MemberBasicInfo {
@@ -1085,8 +1149,24 @@ impl FromModal for MemberBasicInfo {
             name: input.name.into_string(),
             ascii_name: input.ascii_name.into_string(),
             short: input.short.into_string(),
-            picture: attachment,
+            picture: AttachmentOrDownloadURL::Attachment(attachment),
         })
+    }
+
+    fn to_input(&self) -> Self::Input {
+        let attachmemt = match &self.picture {
+            AttachmentOrDownloadURL::Attachment(attachment) => {
+                FixedArray::from_vec_trunc(vec![attachment.clone()])
+            }
+            AttachmentOrDownloadURL::DownloadURL { .. } => FixedArray::new(),
+        };
+
+        MemberBasicInfoModal {
+            name: FixedString::from_str_trunc(&self.name),
+            ascii_name: FixedString::from_str_trunc(&self.ascii_name),
+            short: FixedString::from_str_trunc(&self.short),
+            picture: attachmemt,
+        }
     }
 }
 
@@ -1126,6 +1206,20 @@ impl FromModal for ExtendedMemberBasicInfo {
             position: input.position.map(FixedString::into_string),
             entry: input.entry.map(FixedString::into_string),
         })
+    }
+
+    fn to_input(&self) -> Self::Input {
+        ExtendedMemberBasicInfoModal {
+            department: self
+                .department
+                .as_ref()
+                .map(|n| FixedString::from_str_trunc(n)),
+            position: self
+                .position
+                .as_ref()
+                .map(|n| FixedString::from_str_trunc(n)),
+            entry: self.entry.as_ref().map(|n| FixedString::from_str_trunc(n)),
+        }
     }
 }
 
@@ -1224,7 +1318,7 @@ pub struct DeleteIllustrationModal {
 pub struct TitleAndIllustraion {
     pub title: String,
     pub illustration: Illustration,
-    pub attachment: Attachment,
+    pub attachment: AttachmentOrDownloadURL,
 }
 
 impl FromListModal<5> for TitleAndIllustraion {
@@ -1270,7 +1364,7 @@ impl FromListModal<5> for TitleAndIllustraion {
         Ok(TitleAndIllustraion {
             title: input.title.into_string(),
             illustration,
-            attachment,
+            attachment: AttachmentOrDownloadURL::Attachment(attachment),
         })
     }
 
