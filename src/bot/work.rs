@@ -1,53 +1,28 @@
-use std::{borrow::Cow, fmt::Display, sync::Arc, time::Duration};
-
 use ammonia::clean;
 use anyhow::Error;
-use base64::Engine;
-use camino::Utf8PathBuf;
 use chrono::NaiveDate;
 use fancy_duration::FancyDuration;
 use poise::{
     Modal,
     serenity_prelude::{
-        Attachment, CreateActionRow, CreateButton, CreateComponent, CreateTextDisplay, MessageId,
-        ReactionType,
-        small_fixed_array::{FixedArray, FixedString},
+        ButtonStyle, CreateActionRow, CreateButton, CreateComponent, CreateSeparator,
+        CreateTextDisplay, small_fixed_array::FixedString,
     },
 };
 use pulldown_cmark::{Event, Options, Parser};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::fmt::Debug;
-use tokio::sync::Mutex;
+use std::{borrow::Cow, fmt::Display, time::Duration};
 use url::Url;
 
 use crate::{
-    bot::event::{
-        ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_INFOPAGE, ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_TRACKSPAGE,
-        ZVEZDOCHKA_TICKET_COMPONENT_ARTISTINFO, ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS,
-        ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO, ZVEZDOCHKA_TICKET_COMPONENT_CANCEL_WORK,
-        ZVEZDOCHKA_TICKET_COMPONENT_CONFIRM_WORK, ZVEZDOCHKA_TICKET_COMPONENT_CONTENT,
-        ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION,
-        ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK, ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK,
-        ZVEZDOCHKA_TICKET_COMPONENT_DURATION, ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3, ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5, ZVEZDOCHKA_TICKET_COMPONENT_LINK,
-        ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION, ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK,
-        ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK, ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK_INDEXED,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7, ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8,
-        ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18, ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
+    bot::{
+        Work,
+        utils::{
+            ComponentInteractionTypes, EditConfirmCancel, ListInteraction, MultiInteractType,
+            MultipleEditComponents, PageTurners, PathSection, SingularEditComponents,
+            check_file_exists,
+        },
     },
     site::{
         album::{Illustration, Track},
@@ -55,7 +30,6 @@ use crate::{
     },
 };
 
-pub const FILE_SIZE_LIMIT_BYTES: u32 = 10485760; // 10 mb
 pub const DISCORD_MESSAGE_NO_TAKEBACKSIES: &'static str = "※入力を**クリアすることはできません**。選択の入力もクリアができません。***慎重にボタンをクリックするべき***";
 pub const DISCORD_MESSAGE_FRONTMATTER: &'static str = r#"
 以下のボタンを使えばサイトのページが編集できます。
@@ -65,66 +39,73 @@ pub const DISCORD_MESSAGE_FRONTMATTER: &'static str = r#"
 問題があればサイト担当者に届けてください。
 "#;
 pub const DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION: &'static str = r#"
-### 状態絵文字の説明(まだ入力がない場合):
-- ‼️: この入力は必要
-- ❗: この入力は鑑賞
-- ℹ️: この入力は選択
-### 状態絵文字の説明(入力がある場合)
-- 🟢: この入力は良好
-- 👁️: この入力をご確認してください
-- ⛔: この入力は不良
+### 状態の説明
+- 🟩: この入力は良好
+- ⬛: この入力は基本値
+- 🟥: この入力は不良
 "#;
-pub const ALBUM_WORK_FLIP_TO_TRACKS: &'static str = "アルバムトラック編集へ";
-pub const ALBUM_WORK_FLIP_TO_INFO: &'static str = "アルバム情報編集へ";
-pub const CANCEL_WORK_LABEL: &'static str = "編集をキャンセル";
-pub const CONFIRM_WORK_LABEL: &'static str = "編集確定";
-pub const LIST_INPUT_ADD: &'static str = "追加";
-pub const LIST_INPUT_DELETE: &'static str = "追加";
 
-pub const EMOJI_GOOD: &'static str = "🟢";
-pub const EMOJI_YABAI: &'static str = "⛔";
-pub const EMOJI_CHECK: &'static str = "👁️";
-
-pub const EMOJI_CONFIRM: &'static str = "✅";
-pub const EMOJI_CANCEL: &'static str = "❌";
-
-pub const EMOJI_LIST_ADD: &'static str = "➕";
-pub const EMOJI_LIST_REMOVE: &'static str = "🗑️";
-
-pub const EMOJI_REQUIRED: &'static str = "‼️";
-pub const EMOJI_RECOMMENDED: &'static str = "❗";
-pub const EMOJI_OPTIONAL: &'static str = "ℹ️";
-
-pub const EMOJI_ALBUM_FLIP_TO_TRACK: &'static str = "💽";
-pub const EMOJI_ALBUM_FLIP_TO_INFO: &'static str = "📒";
-
-pub struct Work {
-    pub directory: Utf8PathBuf,
-    pub name_map: NameMap,
-    pub work_state: Arc<Mutex<WorkState>>,
-}
-
-pub enum WorkState {
-    Idle,
-    Working {
-        message_id: MessageId,
-        data: Box<WorkData>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub enum AttachmentOrDownloadURL {
-    Attachment(Attachment),
-    DownloadURL {
-        destination_filename: String,
-        source_url: Url,
-    },
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AlbumWorkStatePage {
     BasicInfo,
     Tracks,
+    SnsLink,
+    Illustrations,
+}
+
+impl AlbumWorkStatePage {
+    pub fn to_buttons(&self) -> Vec<CreateButton<'_>> {
+        let needed = match self {
+            AlbumWorkStatePage::BasicInfo => {
+                vec![
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToAlbumTracks),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToSnsLinks),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToIllustrations),
+                ]
+            }
+            AlbumWorkStatePage::Tracks => {
+                vec![
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToInfo),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToSnsLinks),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToIllustrations),
+                ]
+            }
+            AlbumWorkStatePage::SnsLink => {
+                vec![
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToInfo),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToAlbumTracks),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToIllustrations),
+                ]
+            }
+            AlbumWorkStatePage::Illustrations => {
+                vec![
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToInfo),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToAlbumTracks),
+                    ComponentInteractionTypes::PageTurners(PageTurners::ToSnsLinks),
+                ]
+            }
+        };
+        needed.into_iter().map(|cit| cit.to_button()).collect()
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum OtherWorkStatePage {
+    BasicInfo,
+    SnsLink,
+}
+
+impl OtherWorkStatePage {
+    pub fn to_label(&self) -> ComponentInteractionTypes {
+        match self {
+            OtherWorkStatePage::BasicInfo => {
+                ComponentInteractionTypes::PageTurners(PageTurners::ToInfo)
+            }
+            OtherWorkStatePage::SnsLink => {
+                ComponentInteractionTypes::PageTurners(PageTurners::ToSnsLinks)
+            }
+        }
+    }
 }
 
 pub fn preparing_work_component() -> Cow<'static, [CreateComponent<'static>]> {
@@ -133,6 +114,7 @@ pub fn preparing_work_component() -> Cow<'static, [CreateComponent<'static>]> {
     ))])
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum WorkData {
     Album {
         page: AlbumWorkStatePage,
@@ -140,31 +122,34 @@ pub enum WorkData {
         authors: ModalWrapper<Authors>,
         content: ModalWrapper<PageContent>,
         link: ModalWrapper<MainLink>,
-        sns_links: ModalListWrapper<SnsLink, 8>,
         thumbnail: ModalWrapper<Thumbnail>,
-        illustrations: ModalListWrapper<TitleAndIllustraion, 5>,
-        tracks: ModalListWrapper<AlbumTitleAndTrack, 20>,
+        illustrations: ModalListWrapper<TitleAndIllustraion>,
+        sns_links: ModalListWrapper<SnsLink>,
+        tracks: ModalListWrapper<AlbumTitleAndTrack>,
     },
     Artist {
+        page: OtherWorkStatePage,
         artist_info: ModalWrapper<MemberBasicInfo>,
         additional_artist_info: ModalWrapper<ExtendedMemberBasicInfo>,
-        sns_links: ModalListWrapper<SnsLink, 8>,
         content: ModalWrapper<PageContent>,
+        sns_links: ModalListWrapper<SnsLink>,
     },
     News {
+        page: OtherWorkStatePage,
         basic_info: ModalWrapper<BasicInfo>,
         authors: ModalWrapper<Authors>,
         content: ModalWrapper<PageContent>,
         thumbnail: ModalWrapper<Thumbnail>,
-        sns_links: ModalListWrapper<SnsLink, 8>,
+        sns_links: ModalListWrapper<SnsLink>,
     },
     Song {
+        page: OtherWorkStatePage,
         basic_info: ModalWrapper<BasicInfo>,
         authors: ModalWrapper<Authors>,
         duration: ModalWrapper<TrackDuration>,
         content: ModalWrapper<PageContent>,
         thumbnail: ModalWrapper<Thumbnail>,
-        sns_links: ModalListWrapper<SnsLink, 8>,
+        sns_links: ModalListWrapper<SnsLink>,
     },
 }
 
@@ -175,20 +160,12 @@ impl WorkData {
             None => format!("## 編集するファイル名: <新しいファイル>"),
         };
 
-        let mut confirm_cancel_buttons = vec![
-            CreateButton::new(Cow::Borrowed(ZVEZDOCHKA_TICKET_COMPONENT_CONFIRM_WORK))
-                .label(CONFIRM_WORK_LABEL)
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                    EMOJI_CONFIRM,
-                ))),
-            CreateButton::new(Cow::Borrowed(ZVEZDOCHKA_TICKET_COMPONENT_CANCEL_WORK))
-                .label(CANCEL_WORK_LABEL)
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                    EMOJI_CANCEL,
-                ))),
+        let mut confirm_cancel_turnpage_buttons = vec![
+            ComponentInteractionTypes::EditConfirmCancel(EditConfirmCancel::Confirm).to_button(),
+            ComponentInteractionTypes::EditConfirmCancel(EditConfirmCancel::Cancel).to_button(),
         ];
 
-        match &self {
+        let mut components = match &self {
             WorkData::Album {
                 page,
                 basic_info,
@@ -199,223 +176,312 @@ impl WorkData {
                 thumbnail,
                 illustrations,
                 tracks,
-            } => match page {
-                AlbumWorkStatePage::BasicInfo => {
-                    let mut final_components = Vec::with_capacity(8);
+            } => {
+                let mut page_turners = page.to_buttons();
+                confirm_cancel_turnpage_buttons.append(&mut page_turners);
 
-                    let basic_info_button = basic_info.create_discord_button();
-                    let authors_button = authors.create_discord_button();
-                    let content_button = content.create_discord_button();
-                    let link_button = link.create_discord_button();
-                    let thumbnail_button = thumbnail.create_discord_button();
+                match page {
+                    AlbumWorkStatePage::BasicInfo => {
+                        let status_basic_info = basic_info.item_status();
+                        let status_authors = authors.item_status();
+                        let status_content = content.item_status();
+                        let status_link = link.item_status();
+                        let status_thumbnail = thumbnail.item_status();
 
-                    let mut sns_links_buttons = sns_links.create_button_list();
-                    let mut illustrations_buttons = illustrations.create_button_list();
+                        let status_short_snslink = sns_links.item_status_has_bad();
+                        let status_short_illustrations = illustrations.item_status_has_bad();
+                        let status_short_tracks = tracks.item_status_has_bad();
 
-                    let basic_info_status = basic_info.item_status();
-                    let authors_status = authors.item_status();
-                    let content_status = content.item_status();
-                    let link_status = link.item_status();
-                    let thumbnail_status = thumbnail.item_status();
-
-                    let sns_links_status = sns_links.items_statuses();
-                    let illustrations_status = illustrations.items_statuses();
-
-                    let text_display = format!(
-                        r#"
+                        let status_text_display = format!(
+                            r#"
 {file_name_msg}
 {DISCORD_MESSAGE_FRONTMATTER}
 
 {DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
 
-{basic_info_status}
-{authors_status}
-{content_status}
-{link_status}
-{thumbnail_status}
+{status_basic_info}
+{status_authors}
+{status_content}
+{status_link}
+{status_thumbnail}
 
-{sns_links_status}
-{illustrations_status}
-                        "#
-                    );
+他のページの内容まとめ:
+SNSリンク: {status_short_snslink}
+イラスト: {status_short_illustrations}
+トラック: {status_short_tracks}
+                            "#
+                        );
 
-                    confirm_cancel_buttons.push(
-                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_TRACKSPAGE)
-                            .label(Cow::Borrowed(ALBUM_WORK_FLIP_TO_TRACKS))
-                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                                EMOJI_ALBUM_FLIP_TO_TRACK,
+                        let button_basic_info = basic_info.create_discord_button();
+                        let button_authors = authors.create_discord_button();
+                        let button_content = content.create_discord_button();
+                        let button_link = link.create_discord_button();
+                        let button_thumbnail = thumbnail.create_discord_button();
+
+                        vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
                             ))),
-                    );
+                            CreateComponent::Separator(CreateSeparator::new()),
+                            CreateComponent::ActionRow(CreateActionRow::Buttons(Cow::Owned(vec![
+                                button_basic_info,
+                                button_authors,
+                                button_content,
+                                button_link,
+                                button_thumbnail,
+                            ]))),
+                        ]
+                    }
+                    AlbumWorkStatePage::Tracks => {
+                        let status_short_snslink = sns_links.item_status_has_bad();
+                        let status_short_illustrations = illustrations.item_status_has_bad();
 
-                    final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
-                        Cow::Owned(text_display),
-                    )));
-                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                        Cow::Owned(vec![
-                            basic_info_button,
-                            authors_button,
-                            content_button,
-                            link_button,
-                            thumbnail_button,
-                        ]),
-                    )));
-                    final_components.append(&mut sns_links_buttons);
-                    final_components.append(&mut illustrations_buttons);
-                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                        Cow::Owned(confirm_cancel_buttons),
-                    )));
+                        let status_tracks = tracks.items_statuses();
 
-                    final_components
-                }
-                AlbumWorkStatePage::Tracks => {
-                    let mut final_components = Vec::with_capacity(8);
-                    let tracks_status = tracks.items_statuses();
-
-                    let mut tracks_buttons = tracks.create_button_list();
-
-                    let text_display = format!(
-                        r#"
+                        let status_text_display = format!(
+                            r#"
 {file_name_msg}
 {DISCORD_MESSAGE_FRONTMATTER}
 
 {DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
 
-{tracks_status}
-"#
-                    );
+{status_tracks}
 
-                    confirm_cancel_buttons.push(
-                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK_INDEXED)
-                            .label(Cow::Borrowed("番号にトラックを入れ"))
-                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc("🔢"))),
-                    );
-                    confirm_cancel_buttons.push(
-                        CreateButton::new(ZVEZDOCHKA_TICKET_COMPONENT_ALBUM_INFOPAGE)
-                            .label(Cow::Borrowed(ALBUM_WORK_FLIP_TO_INFO))
-                            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                                EMOJI_ALBUM_FLIP_TO_INFO,
+他のページの内容まとめ:
+SNSリンク: {status_short_snslink}
+イラスト: {status_short_illustrations}
+                            "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
                             ))),
-                    );
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut tracks.create_button_list());
+                        status_components
+                    }
+                    AlbumWorkStatePage::SnsLink => {
+                        let status_short_tracks = tracks.item_status_has_bad();
+                        let status_short_illust = illustrations.item_status_has_bad();
 
-                    final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
-                        Cow::Owned(text_display),
-                    )));
-                    final_components.append(&mut tracks_buttons);
-                    final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                        Cow::Owned(confirm_cancel_buttons),
-                    )));
+                        let status_snslink = sns_links.items_statuses();
 
-                    final_components
+                        let status_text_display = format!(
+                            r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{status_snslink}
+
+他のページの内容まとめ:
+イラスト: {status_short_illust}
+トラック: {status_short_tracks}
+                            "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut sns_links.create_button_list());
+                        status_components
+                    }
+                    AlbumWorkStatePage::Illustrations => {
+                        let status_short_tracks = tracks.item_status_has_bad();
+                        let status_short_snslinks = sns_links.item_status_has_bad();
+
+                        let status_illustration = illustrations.items_statuses();
+
+                        let status_text_display = format!(
+                            r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{status_illustration}
+
+他のページの内容まとめ:
+SNSリンク: {status_short_snslinks}
+トラック: {status_short_tracks}
+                            "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut illustrations.create_button_list());
+                        status_components
+                    }
                 }
-            },
+            }
             WorkData::Artist {
+                page,
                 artist_info,
                 additional_artist_info,
                 sns_links,
                 content,
             } => {
-                let mut final_components = Vec::with_capacity(5);
+                let page_turner = page.to_label().to_button();
+                confirm_cancel_turnpage_buttons.push(page_turner);
 
-                let artist_info_button = artist_info.create_discord_button();
-                let additional_artist_info_button = additional_artist_info.create_discord_button();
-                let content_button = content.create_discord_button();
+                match page {
+                    OtherWorkStatePage::BasicInfo => {
+                        let status_artist_info = artist_info.item_status();
+                        let status_additional_artist_info = additional_artist_info.item_status();
+                        let status_content = content.item_status();
 
-                let mut sns_links_buttons = sns_links.create_button_list();
+                        let status_short_snslink = sns_links.item_status_has_bad();
 
-                let artist_info_status = artist_info.item_status();
-                let additional_artist_info_status = additional_artist_info.item_status();
-                let content_status = content.item_status();
-
-                let sns_links_status = sns_links.items_statuses();
-
-                let text_display = format!(
-                    r#"
+                        let status_text_display = format!(
+                            r#"
 {file_name_msg}
 {DISCORD_MESSAGE_FRONTMATTER}
 
 {DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
 
-{artist_info_status}
-{additional_artist_info_status}
-{content_status}
-{sns_links_status}
-"#
-                );
+{status_artist_info}
+{status_additional_artist_info}
+{status_content}
 
-                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
-                    Cow::Owned(text_display),
-                )));
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(vec![
-                        artist_info_button,
-                        additional_artist_info_button,
-                        content_button,
-                    ]),
-                )));
-                final_components.append(&mut sns_links_buttons);
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(confirm_cancel_buttons),
-                )));
+他のページの内容まとめ:
+SNSリンク: {status_short_snslink}
+                            "#
+                        );
 
-                final_components
+                        let button_artist_info = artist_info.create_discord_button();
+                        let button_additional_artist_info =
+                            additional_artist_info.create_discord_button();
+                        let button_content = content.create_discord_button();
+
+                        vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                            CreateComponent::ActionRow(CreateActionRow::Buttons(Cow::Owned(vec![
+                                button_artist_info,
+                                button_additional_artist_info,
+                                button_content,
+                            ]))),
+                        ]
+                    }
+                    OtherWorkStatePage::SnsLink => {
+                        let status_snslink = sns_links.items_statuses();
+
+                        let status_text_display = format!(
+                            r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{status_snslink}
+                            "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut sns_links.create_button_list());
+                        status_components
+                    }
+                }
             }
             WorkData::News {
+                page,
                 basic_info,
                 authors,
                 content,
                 thumbnail,
                 sns_links,
             } => {
-                let mut final_components = Vec::with_capacity(5);
+                let page_turner = page.to_label().to_button();
+                confirm_cancel_turnpage_buttons.push(page_turner);
 
-                let basic_info_button = basic_info.create_discord_button();
-                let authors_button = authors.create_discord_button();
-                let content_button = content.create_discord_button();
-                let thumbnail_button = thumbnail.create_discord_button();
+                match page {
+                    OtherWorkStatePage::BasicInfo => {
+                        let status_basic_info = basic_info.item_status();
+                        let status_authors = authors.item_status();
+                        let status_content = content.item_status();
+                        let status_thumbnail = thumbnail.item_status();
 
-                let mut sns_links_buttons = sns_links.create_button_list();
+                        let status_short_snslink = sns_links.item_status_has_bad();
 
-                let basic_info_status = basic_info.item_status();
-                let authors_status = authors.item_status();
-                let content_status = content.item_status();
-                let thumbnail_status = thumbnail.item_status();
-
-                let sns_links_status = sns_links.items_statuses();
-
-                let text_display = format!(
-                    r#"
+                        let status_text_display = format!(
+                            r#"
 {file_name_msg}
 {DISCORD_MESSAGE_FRONTMATTER}
 
 {DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
 
-{basic_info_status}
-{authors_status}
-{content_status}
-{thumbnail_status}
-{sns_links_status}
-"#
-                );
+{status_basic_info}
+{status_authors}
+{status_content}
+{status_thumbnail}
 
-                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
-                    Cow::Owned(text_display),
-                )));
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(vec![
-                        basic_info_button,
-                        authors_button,
-                        content_button,
-                        thumbnail_button,
-                    ]),
-                )));
-                final_components.append(&mut sns_links_buttons);
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(confirm_cancel_buttons),
-                )));
+他のページの内容まとめ:
+SNSリンク: {status_short_snslink}
+                        "#
+                        );
 
-                final_components
+                        let button_basic_info = basic_info.create_discord_button();
+                        let button_authors = authors.create_discord_button();
+                        let button_content = content.create_discord_button();
+                        let button_thumbnail = thumbnail.create_discord_button();
+
+                        vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                            CreateComponent::ActionRow(CreateActionRow::Buttons(Cow::Owned(vec![
+                                button_basic_info,
+                                button_authors,
+                                button_content,
+                                button_thumbnail,
+                            ]))),
+                        ]
+                    }
+                    OtherWorkStatePage::SnsLink => {
+                        let status_snslink = sns_links.items_statuses();
+
+                        let status_text_display = format!(
+                            r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{status_snslink}
+                        "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut sns_links.create_button_list());
+                        status_components
+                    }
+                }
             }
             WorkData::Song {
+                page,
                 basic_info,
                 authors,
                 duration,
@@ -423,128 +489,143 @@ impl WorkData {
                 thumbnail,
                 sns_links,
             } => {
-                let mut final_components = Vec::with_capacity(5);
+                let page_turner = page.to_label().to_button();
+                confirm_cancel_turnpage_buttons.push(page_turner);
 
-                let basic_info_button = basic_info.create_discord_button();
-                let authors_button = authors.create_discord_button();
-                let content_button = content.create_discord_button();
-                let duration_button = duration.create_discord_button();
-                let thumbnail_button = thumbnail.create_discord_button();
+                match page {
+                    OtherWorkStatePage::BasicInfo => {
+                        let status_basic_info = basic_info.item_status();
+                        let status_authors = authors.item_status();
+                        let status_duration = duration.item_status();
+                        let status_content = content.item_status();
+                        let status_thumbnail = thumbnail.item_status();
 
-                let mut sns_links_buttons = sns_links.create_button_list();
+                        let status_short_snslink = sns_links.item_status_has_bad();
 
-                let basic_info_status = basic_info.item_status();
-                let authors_status = authors.item_status();
-                let content_status = content.item_status();
-                let duration_status = duration.item_status();
-                let thumbnail_status = thumbnail.item_status();
-
-                let sns_links_status = sns_links.items_statuses();
-
-                let text_display = format!(
-                    r#"
+                        let status_text_display = format!(
+                            r#"
 {file_name_msg}
 {DISCORD_MESSAGE_FRONTMATTER}
 
 {DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
 
-{basic_info_status}
-{authors_status}
-{content_status}
-{thumbnail_status}
-{duration_status}
-{sns_links_status}
-"#
-                );
+{status_basic_info}
+{status_authors}
+{status_duration}
+{status_content}
+{status_thumbnail}
 
-                final_components.push(CreateComponent::TextDisplay(CreateTextDisplay::new(
-                    Cow::Owned(text_display),
-                )));
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(vec![
-                        basic_info_button,
-                        authors_button,
-                        content_button,
-                        thumbnail_button,
-                        duration_button,
-                    ]),
-                )));
-                final_components.append(&mut sns_links_buttons);
-                final_components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
-                    Cow::Owned(confirm_cancel_buttons),
-                )));
+他のページの内容まとめ:
+SNSリンク: {status_short_snslink}
+                        "#
+                        );
 
-                final_components
+                        let button_basic_info = basic_info.create_discord_button();
+                        let button_authors = authors.create_discord_button();
+                        let button_duration = duration.create_discord_button();
+                        let button_content = content.create_discord_button();
+                        let button_thumbnail = thumbnail.create_discord_button();
+
+                        vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                            CreateComponent::ActionRow(CreateActionRow::Buttons(Cow::Owned(vec![
+                                button_basic_info,
+                                button_authors,
+                                button_duration,
+                                button_content,
+                                button_thumbnail,
+                            ]))),
+                        ]
+                    }
+                    OtherWorkStatePage::SnsLink => {
+                        let status_snslink = sns_links.items_statuses();
+
+                        let status_text_display = format!(
+                            r#"
+{file_name_msg}
+{DISCORD_MESSAGE_FRONTMATTER}
+
+{DISCORD_MESSAGE_EMOJI_STATUS_EXPLATINATION}
+
+{status_snslink}
+                        "#
+                        );
+
+                        let mut status_components = vec![
+                            CreateComponent::TextDisplay(CreateTextDisplay::new(Cow::Owned(
+                                status_text_display,
+                            ))),
+                            CreateComponent::Separator(CreateSeparator::new()),
+                        ];
+                        status_components.append(&mut sns_links.create_button_list());
+                        status_components
+                    }
+                }
             }
-        }
+        };
+
+        components.push(CreateComponent::Separator(CreateSeparator::new()));
+        components.push(CreateComponent::ActionRow(CreateActionRow::Buttons(
+            Cow::Owned(confirm_cancel_turnpage_buttons),
+        )));
+
+        components
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ModalWrapper<T>
 where
     T: FromModal,
 {
     Unset,
     InitWithValue(T),
-    Ok {
-        input: T::Input,
-        value: T,
-    },
-    Bad {
-        input: T::Input,
-        error: Box<anyhow::Error>,
-    },
+    Ok { input: T::Input, value: T },
+    Bad { input: T::Input, error: String },
 }
 
 impl<T> ModalWrapper<T>
 where
     T: FromModal,
 {
-    pub fn id() -> &'static str {
-        T::ID
+    pub const fn id() -> ComponentInteractionTypes {
+        ComponentInteractionTypes::Singular(T::ID)
     }
 
-    pub fn label() -> &'static str {
-        T::LABEL
-    }
-
-    pub fn required() -> Required {
+    pub const fn required() -> Required {
         T::REQUIRED
     }
 
-    pub fn create_discord_button(&self) -> CreateButton<'static> {
-        let status = match &self {
+    pub fn create_discord_button(&self) -> CreateButton<'_> {
+        let status = match self {
             ModalWrapper::Unset => match Self::required() {
-                Required::Yes => EMOJI_REQUIRED,
-                Required::Recommended => EMOJI_OPTIONAL,
-                Required::Optional => EMOJI_OPTIONAL,
+                Required::Yes => ButtonStyle::Danger,
+                Required::Recommended => ButtonStyle::Primary,
+                Required::Optional => ButtonStyle::Secondary,
             },
-            ModalWrapper::Ok { .. } => EMOJI_GOOD,
-            ModalWrapper::Bad { .. } => EMOJI_YABAI,
-            ModalWrapper::InitWithValue(_) => EMOJI_CHECK,
+            ModalWrapper::Ok { .. } => ButtonStyle::Success,
+            ModalWrapper::Bad { .. } => ButtonStyle::Danger,
+            ModalWrapper::InitWithValue(_) => ButtonStyle::Primary,
         };
-
-        CreateButton::new(Cow::Borrowed(Self::id()))
-            .label(Cow::Borrowed(Self::label()))
-            .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                status,
-            )))
+        Self::id().to_button().style(status)
     }
 
     pub fn item_status(&self) -> String {
         let status = match &self {
             ModalWrapper::Unset => "未定義値".to_string(),
             ModalWrapper::Ok { .. } => "良好".to_string(),
-            ModalWrapper::Bad { error, .. } => format!("エラーが発生しました: {:?}", error),
-            ModalWrapper::InitWithValue(_) => "確認してください".to_string(),
+            ModalWrapper::Bad { error, .. } => format!("エラー: {:?}", error),
+            ModalWrapper::InitWithValue(_) => "基本値".to_string(),
         };
 
         format!(
             r#"
 - {}: {}
             "#,
-            Self::label(),
+            Self::id().to_button_label(),
             status
         )
     }
@@ -571,73 +652,83 @@ where
     }
 }
 
-pub struct ModalListWrapper<T, const N: usize>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ModalListWrapperIndividualItem<T>
 where
-    T: FromListModal<N>,
+    T: FromListModal + Serialize + DeserializeOwned,
 {
-    items: Vec<Result<T, Error>>,
-    previous_inputs: Vec<Option<T::AddOrIndividualInput>>,
+    InitWithValue(T),
+    Ok {
+        input: T::AddOrIndividualInput,
+        value: T,
+    },
+    Bad {
+        input: T::AddOrIndividualInput,
+        error: String,
+    },
 }
 
-impl<T, const N: usize> ModalListWrapper<T, N>
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModalListWrapper<T>
 where
-    T: FromListModal<N>,
+    T: FromListModal + Serialize + DeserializeOwned,
 {
-    pub fn add_id() -> &'static str {
-        T::ADD_MODAL_ID
+    items: Vec<ModalListWrapperIndividualItem<T>>,
+}
+
+impl<T> ModalListWrapper<T>
+where
+    T: FromListModal + Serialize + DeserializeOwned,
+{
+    pub const fn add_id() -> ComponentInteractionTypes {
+        ComponentInteractionTypes::Multiple(MultipleEditComponents {
+            interact_type: T::MULTI_TYPE,
+            action_type: ListInteraction::Add,
+        })
     }
-    pub fn remove_id() -> &'static str {
-        T::REMOVE_MODAL_ID
+    pub const fn remove_id() -> ComponentInteractionTypes {
+        ComponentInteractionTypes::Multiple(MultipleEditComponents {
+            interact_type: T::MULTI_TYPE,
+            action_type: ListInteraction::Remove,
+        })
     }
-    pub fn item_ids() -> &'static [&'static str; N] {
-        &T::ITEM_IDS
-    }
-    pub fn individual_label() -> &'static str {
-        T::INDIVIDUAL_LABEL
+    pub const fn item_id(idx: u8) -> ComponentInteractionTypes {
+        ComponentInteractionTypes::Multiple(MultipleEditComponents {
+            interact_type: T::MULTI_TYPE,
+            action_type: ListInteraction::Edit(idx),
+        })
     }
     pub fn required() -> Required {
         T::REQUIRED
     }
 
     pub fn new(values: Vec<T>) -> Result<Self, Error> {
-        if values.len() > N {
+        if values.len() > 25 {
             return Err(Error::msg("Contract Violation - Too many values!"));
         }
-
-        let prev_values: Vec<Option<T::AddOrIndividualInput>> =
-            Vec::from_fn(values.len(), |_| None);
-
         Ok(Self {
-            items: values.into_iter().map(|x| Ok(x)).collect(),
-            previous_inputs: prev_values,
+            items: values
+                .into_iter()
+                .map(|x| ModalListWrapperIndividualItem::InitWithValue(x))
+                .collect(),
         })
     }
 
     pub fn create_button_list(&self) -> Vec<CreateComponent<'_>> {
         let items_iter = self.items.iter();
-        let item_ids = Self::item_ids().iter();
         let all_buttons = items_iter
-            .zip(item_ids)
             .enumerate()
-            .map(|(index, (item, id))| match item {
-                Ok(_) => CreateButton::new(Cow::Borrowed(*id))
-                    .label(Cow::Owned(format!(
-                        "{} #{}",
-                        Self::individual_label(),
-                        index + 1
-                    )))
-                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                        EMOJI_GOOD,
-                    ))),
-                Err(_) => CreateButton::new(Cow::Borrowed(*id))
-                    .label(Cow::Owned(format!(
-                        "{} #{}",
-                        Self::individual_label(),
-                        index + 1
-                    )))
-                    .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                        EMOJI_YABAI,
-                    ))),
+            .map(|(index, item)| {
+                let status = match item {
+                    ModalListWrapperIndividualItem::InitWithValue(_) => match Self::required() {
+                        Required::Yes => ButtonStyle::Primary,
+                        Required::Recommended => ButtonStyle::Primary,
+                        Required::Optional => ButtonStyle::Secondary,
+                    },
+                    ModalListWrapperIndividualItem::Ok { .. } => ButtonStyle::Success,
+                    ModalListWrapperIndividualItem::Bad { .. } => ButtonStyle::Danger,
+                };
+                Self::item_id(index as u8).to_button().style(status)
             })
             .collect::<Vec<CreateButton<'_>>>();
 
@@ -652,24 +743,8 @@ where
 
         // _shakes fist_ if only create button fns were const...
         let default_buttons = CreateActionRow::Buttons(Cow::Owned(vec![
-            CreateButton::new(Cow::Borrowed(Self::add_id()))
-                .label(Cow::Owned(format!(
-                    "{}{}",
-                    Self::individual_label(),
-                    LIST_INPUT_ADD
-                )))
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                    EMOJI_LIST_ADD,
-                ))),
-            CreateButton::new(Cow::Borrowed(Self::remove_id()))
-                .label(Cow::Owned(format!(
-                    "{}{}",
-                    Self::individual_label(),
-                    LIST_INPUT_DELETE
-                )))
-                .emoji(ReactionType::Unicode(FixedString::from_static_trunc(
-                    EMOJI_LIST_REMOVE,
-                ))),
+            Self::add_id().to_button(),
+            Self::remove_id().to_button(),
         ]));
 
         list_of_multiple_buttons.push(CreateComponent::ActionRow(default_buttons));
@@ -678,7 +753,7 @@ where
 
     pub fn items_statuses(&self) -> String {
         if self.items.is_empty() {
-            return format!("現在、{}がありません", Self::individual_label());
+            return "現在、入力がありません。".to_string();
         }
 
         self.items
@@ -686,30 +761,36 @@ where
             .enumerate()
             .map(|(index, item)| {
                 let status = match item {
-                    Ok(_) => "良好".to_string(),
-                    Err(err) => format!("エラーが発生しました: {err}"),
+                    ModalListWrapperIndividualItem::InitWithValue(_) => Cow::Borrowed("基本値"),
+                    ModalListWrapperIndividualItem::Ok { .. } => Cow::Borrowed("良好"),
+                    ModalListWrapperIndividualItem::Bad { input: _, error } => {
+                        Cow::Owned(format!("エラー発生: {error}"))
+                    }
                 };
 
-                format!(
-                    "- {} #{}: {}\n",
-                    Self::individual_label(),
-                    index + 1,
-                    status
-                )
+                format!("- #{}: {}\n", index + 1, status)
             })
             .collect::<String>()
     }
+
+    pub fn item_status_has_bad(&self) -> &'static str {
+        match self.items.iter().any(|item| match item {
+            ModalListWrapperIndividualItem::InitWithValue(_)
+            | ModalListWrapperIndividualItem::Ok { .. } => false,
+            ModalListWrapperIndividualItem::Bad { .. } => true,
+        }) {
+            true => "良好",
+            false => "エラーあり！！！",
+        }
+    }
 }
 
-impl<T, const N: usize> Default for ModalListWrapper<T, N>
+impl<T> Default for ModalListWrapper<T>
 where
-    T: FromListModal<N>,
+    T: FromListModal,
 {
     fn default() -> Self {
-        Self {
-            items: vec![],
-            previous_inputs: vec![],
-        }
+        Self { items: vec![] }
     }
 }
 
@@ -731,48 +812,30 @@ impl Display for Required {
     }
 }
 
-trait FromModal: Sized + Clone + Debug {
-    const ID: &'static str;
-    const LABEL: &'static str;
+trait FromModal: Sized + Clone + Debug + Serialize + DeserializeOwned {
+    const ID: SingularEditComponents;
     const REQUIRED: Required;
 
     type Input: Modal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error>;
+    fn parse(context: &Work, input: Self::Input) -> Result<Self, Error>;
 
     fn to_input(&self) -> Self::Input;
 }
 
-trait FromListModal<const MAX_ITEMS: usize>: Sized + Clone + Debug {
-    const ADD_MODAL_ID: &'static str;
-    const REMOVE_MODAL_ID: &'static str;
-    const ITEM_IDS: [&'static str; MAX_ITEMS];
-    const INDIVIDUAL_LABEL: &'static str;
+trait FromListModal: Sized + Clone + Debug + Serialize + DeserializeOwned {
+    const MULTI_TYPE: MultiInteractType;
     const REQUIRED: Required;
 
     type AddOrIndividualInput: Modal;
     type DeleteInput: Modal;
 
-    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error>;
+    fn parse_individual(context: &Work, input: Self::AddOrIndividualInput) -> Result<Self, Error>;
 
     fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error>;
 }
 
-fn check_attachmemt_is_picture_and_under_flimit(attachment: &Attachment) -> Result<(), Error> {
-    if let None = attachment.dimensions() {
-        return Err(Error::msg("Attachment is not an image!"));
-    }
-
-    if attachment.size > FILE_SIZE_LIMIT_BYTES {
-        return Err(Error::msg(format!(
-            "File size was larger than configured maximum {FILE_SIZE_LIMIT_BYTES}"
-        )));
-    }
-
-    return Ok(());
-}
-
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "ページ基本情報"]
 #[text_display = "マニュアル:　"]
 pub struct BasicInfoModal {
@@ -788,7 +851,7 @@ pub struct BasicInfoModal {
     #[description = "年年年年-月月-日日 （例:　2026-07-31)"]
     pub date: FixedString<u16>,
 }
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct BasicInfo {
     pub title: String,
     pub short_description: String,
@@ -796,13 +859,12 @@ pub struct BasicInfo {
 }
 
 impl FromModal for BasicInfo {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_BASICINFO;
-    const LABEL: &'static str = "基本情報";
+    const ID: SingularEditComponents = SingularEditComponents::BasicInfo;
     const REQUIRED: Required = Required::Yes;
 
     type Input = BasicInfoModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(_context: &Work, input: Self::Input) -> Result<Self, Error> {
         let date = NaiveDate::parse_from_str(&input.date, "%Y-%m-%d")?;
         Ok(BasicInfo {
             title: input.title.into_string(),
@@ -820,12 +882,15 @@ impl FromModal for BasicInfo {
     }
 }
 
-fn parse_authors(authors_str: &str) -> Result<Vec<String>, Error> {
+fn parse_authors(name_map: &NameMap, authors_str: &str) -> Result<Vec<String>, Error> {
     authors_str
         .split(",")
         .map(str::trim)
         .map(|x| match x.chars().all(|c| c.is_ascii_alphanumeric()) {
-            true => Ok(x.to_string()),
+            true => match name_map.members.get(x) {
+                Some(_) => Ok(x.to_string()),
+                None => Err(Error::msg("author parsing failed: author doesn't exist")),
+            },
             false => Err(Error::msg("author parsing failed: bad character")),
         })
         .collect::<Result<Vec<String>, Error>>()
@@ -839,7 +904,7 @@ fn parse_additional_authors(authors_str: &str) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "作成者情報"]
 #[text_display = "マニュアル:　"]
 pub struct AuthorsModal {
@@ -851,21 +916,20 @@ pub struct AuthorsModal {
     pub additional_authors: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Authors {
     pub authors: Vec<String>,
     pub additional_authors: Vec<String>,
 }
 
 impl FromModal for Authors {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_AUTHORS;
-    const LABEL: &'static str = "作成者情報";
+    const ID: SingularEditComponents = SingularEditComponents::Authors;
     const REQUIRED: Required = Required::Yes;
 
     type Input = AuthorsModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        let authors = parse_authors(&input.authors)?;
+    fn parse(context: &Work, input: Self::Input) -> Result<Self, Error> {
+        let authors = parse_authors(&context.name_map, &input.authors)?;
         let additional_authors = parse_additional_authors(&input.additional_authors);
 
         Ok(Authors {
@@ -884,7 +948,7 @@ impl FromModal for Authors {
     }
 }
 
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "ページ内容"]
 #[text_display = "マニュアル:　"]
 pub struct PageContentModal {
@@ -892,19 +956,18 @@ pub struct PageContentModal {
     pub content: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct PageContent {
     pub content: String,
 }
 
 impl FromModal for PageContent {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_CONTENT;
-    const LABEL: &'static str = "ページ内容";
+    const ID: SingularEditComponents = SingularEditComponents::Content;
     const REQUIRED: Required = Required::Recommended;
 
     type Input = PageContentModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(_context: &Work, input: Self::Input) -> Result<Self, Error> {
         let options = Options::all();
         for event in Parser::new_ext(&input.content, options) {
             if let Event::End(_) = event {
@@ -923,7 +986,7 @@ impl FromModal for PageContent {
     }
 }
 
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "主要リンク"]
 #[text_display = "マニュアル:　"]
 pub struct MainLinkModal {
@@ -931,19 +994,18 @@ pub struct MainLinkModal {
     pub link: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct MainLink {
     pub url: Url,
 }
 
 impl FromModal for MainLink {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_LINK;
-    const LABEL: &'static str = "主要リンク";
+    const ID: SingularEditComponents = SingularEditComponents::Link;
     const REQUIRED: Required = Required::Recommended;
 
     type Input = MainLinkModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(_context: &Work, input: Self::Input) -> Result<Self, Error> {
         Ok(MainLink {
             url: Url::parse(&input.link)?,
         })
@@ -956,14 +1018,14 @@ impl FromModal for MainLink {
     }
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "サムネイル"]
 #[text_display = "マニュアル:　"]
 pub struct ThumbnailModal {
-    #[file_upload]
-    #[file_types("image")]
-    #[name = "サムネイルファイル（一つのファイルのみ)"]
-    pub image: FixedArray<Attachment, u32>,
+    #[name = "イメージファイル名（まずアップロード必須)"]
+    #[max_length = 50]
+    #[min_length = 1]
+    pub image: FixedString<u16>,
     #[name = "メンバーページある作成者"]
     #[description = "名は\",\"で分離して入力してください。英語字幕のみです。（例: mitsumori, knoeze, seeyoumayday)"]
     pub authors: FixedString<u16>,
@@ -972,54 +1034,40 @@ pub struct ThumbnailModal {
     pub additional_authors: FixedString<u16>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Thumbnail {
     pub illustration: Illustration,
-    pub attachment: AttachmentOrDownloadURL,
 }
 
 impl FromModal for Thumbnail {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_THUMBNAIL;
-    const LABEL: &'static str = "サムネイル設定";
+    const ID: SingularEditComponents = SingularEditComponents::Thumbnail;
     const REQUIRED: Required = Required::Optional;
 
     type Input = ThumbnailModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
-        if input.image.len() != 1 {
-            return Err(Error::msg("Needs exactly one image!"));
-        }
-
-        let attachment = input.image[0].clone();
-
-        check_attachmemt_is_picture_and_under_flimit(&attachment)?;
-
-        let illustrators = parse_authors(&input.authors)?;
-        let additional_illustrators = parse_additional_authors(&input.additional_authors);
-
-        let illustration = process_attachment(
-            &attachment,
-            illustrators,
-            additional_illustrators,
-            Some("Thumbnail".to_string()),
+    fn parse(context: &Work, input: Self::Input) -> Result<Self, Error> {
+        check_file_exists(
+            &context.directory,
+            PathSection::Image,
+            &input.image.as_str(),
         )?;
 
-        Ok(Thumbnail {
-            illustration,
-            attachment: AttachmentOrDownloadURL::Attachment(attachment),
-        })
+        let illustrators = parse_authors(&context.name_map, &input.authors)?;
+        let additional_illustrators = parse_additional_authors(&input.additional_authors);
+
+        let illustration = Illustration {
+            image: input.image.to_string(),
+            illustrators,
+            additional_illustrators,
+            description: Some("サムネイル".to_string()),
+        };
+
+        Ok(Thumbnail { illustration })
     }
 
     fn to_input(&self) -> Self::Input {
-        let attachmemt = match &self.attachment {
-            AttachmentOrDownloadURL::Attachment(attachment) => {
-                FixedArray::from_vec_trunc(vec![attachment.clone()])
-            }
-            AttachmentOrDownloadURL::DownloadURL { .. } => FixedArray::new(),
-        };
-
         ThumbnailModal {
-            image: attachmemt,
+            image: FixedString::from_str_trunc(&self.illustration.image),
             authors: FixedString::from_string_trunc(
                 self.illustration.illustrators.join(", ").to_string(),
             ),
@@ -1033,30 +1081,7 @@ impl FromModal for Thumbnail {
     }
 }
 
-fn process_attachment(
-    attachment: &Attachment,
-    illustrators: Vec<String>,
-    additional_illustrators: Vec<String>,
-    description: Option<String>,
-) -> Result<Illustration, Error> {
-    check_attachmemt_is_picture_and_under_flimit(attachment)?;
-
-    let filename = &attachment.filename;
-    let attachment_id_b64 =
-        base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(&attachment.id.get().to_be_bytes());
-    let destination_filename = format!("images/{attachment_id_b64}-{filename}");
-
-    let illustration = Illustration {
-        image: destination_filename,
-        illustrators,
-        additional_illustrators,
-        description,
-    };
-
-    Ok(illustration)
-}
-
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "曲の長さ入力"]
 pub struct DurationModal {
     #[max_length = 5]
@@ -1066,17 +1091,16 @@ pub struct DurationModal {
     pub length_mmss: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrackDuration(pub FancyDuration<Duration>);
 
 impl FromModal for TrackDuration {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DURATION;
-    const LABEL: &'static str = "曲の長さ入力";
+    const ID: SingularEditComponents = SingularEditComponents::Duration;
     const REQUIRED: Required = Required::Yes;
 
     type Input = DurationModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(_context: &Work, input: Self::Input) -> Result<Self, Error> {
         Ok(TrackDuration(FancyDuration::parse(&input.length_mmss)?))
     }
 
@@ -1105,28 +1129,27 @@ pub struct MemberBasicInfoModal {
     #[max_length = 150]
     #[min_length = 1]
     pub short: FixedString<u16>,
-    #[file_upload]
-    #[file_types("image")]
-    #[name = "（必須）メンバープロファイル写真"]
-    pub picture: FixedArray<Attachment, u32>,
+    #[name = "プロファイル写真（まずアップロード必須)"]
+    #[max_length = 50]
+    #[min_length = 1]
+    pub profile_picture: FixedString<u16>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MemberBasicInfo {
     pub name: String,
     pub ascii_name: String,
     pub short: String,
-    pub picture: AttachmentOrDownloadURL,
+    pub profile_picture: String,
 }
 
 impl FromModal for MemberBasicInfo {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_ARTISTINFO;
-    const LABEL: &'static str = "メンバー基本情報";
+    const ID: SingularEditComponents = SingularEditComponents::ArtistInfo;
     const REQUIRED: Required = Required::Yes;
 
     type Input = MemberBasicInfoModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(context: &Work, input: Self::Input) -> Result<Self, Error> {
         input
             .ascii_name
             .chars()
@@ -1137,35 +1160,43 @@ impl FromModal for MemberBasicInfo {
             return Err(Error::msg("Illegal character in `name`"));
         }
 
-        if input.picture.len() != 1 {
-            return Err(Error::msg("Only 1 picture allowed!"));
+        if let Some(_) = context.name_map.members.get(input.ascii_name.as_str()) {
+            return Err(Error::msg(
+                "Name conflict: ascii name already exists in name map!",
+            ));
         }
 
-        let attachment = input.picture[0].clone();
+        if let Some(_) = context
+            .name_map
+            .members
+            .values()
+            .find(|item| item.as_str() == input.name.as_str())
+        {
+            return Err(Error::msg(
+                "Name conflict: name already exists in name map!",
+            ));
+        }
 
-        check_attachmemt_is_picture_and_under_flimit(&attachment)?;
+        check_file_exists(
+            &context.directory,
+            PathSection::Image,
+            &input.profile_picture.as_str(),
+        )?;
 
         Ok(MemberBasicInfo {
             name: input.name.into_string(),
             ascii_name: input.ascii_name.into_string(),
             short: input.short.into_string(),
-            picture: AttachmentOrDownloadURL::Attachment(attachment),
+            profile_picture: input.profile_picture.into_string(),
         })
     }
 
     fn to_input(&self) -> Self::Input {
-        let attachmemt = match &self.picture {
-            AttachmentOrDownloadURL::Attachment(attachment) => {
-                FixedArray::from_vec_trunc(vec![attachment.clone()])
-            }
-            AttachmentOrDownloadURL::DownloadURL { .. } => FixedArray::new(),
-        };
-
         MemberBasicInfoModal {
             name: FixedString::from_str_trunc(&self.name),
             ascii_name: FixedString::from_str_trunc(&self.ascii_name),
             short: FixedString::from_str_trunc(&self.short),
-            picture: attachmemt,
+            profile_picture: FixedString::from_str_trunc(&self.short),
         }
     }
 }
@@ -1186,7 +1217,7 @@ pub struct ExtendedMemberBasicInfoModal {
     pub entry: Option<FixedString<u16>>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct ExtendedMemberBasicInfo {
     pub department: Option<String>,
     pub position: Option<String>,
@@ -1194,13 +1225,12 @@ pub struct ExtendedMemberBasicInfo {
 }
 
 impl FromModal for ExtendedMemberBasicInfo {
-    const ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_EXT_ARTISTINFO;
-    const LABEL: &'static str = "追加メンバー情報入力";
+    const ID: SingularEditComponents = SingularEditComponents::AdditionlArtistInfo;
     const REQUIRED: Required = Required::Optional;
 
     type Input = ExtendedMemberBasicInfoModal;
 
-    fn parse(input: Self::Input) -> Result<Self, Error> {
+    fn parse(_context: &Work, input: Self::Input) -> Result<Self, Error> {
         Ok(ExtendedMemberBasicInfo {
             department: input.department.map(FixedString::into_string),
             position: input.position.map(FixedString::into_string),
@@ -1226,7 +1256,7 @@ impl FromModal for ExtendedMemberBasicInfo {
 // from here, modals that can have multiples (sns link, track, illusts)
 //
 
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "SNSリンク追加"]
 #[text_display = "マニュアル:　"]
 pub struct SnsLinksModal {
@@ -1234,7 +1264,7 @@ pub struct SnsLinksModal {
 }
 
 // from here, modals that can have multiples (sns link, track, illusts)
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "SNSリンク消去"]
 #[text_display = "マニュアル:　"]
 pub struct DeleteSnsLinksModal {
@@ -1243,35 +1273,20 @@ pub struct DeleteSnsLinksModal {
     pub number: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct SnsLink {
     pub url: Url,
 }
 
-impl FromListModal<8> for SnsLink {
-    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_SNSLINK;
-
-    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_SNSLINK;
-
-    const ITEM_IDS: [&'static str; 8] = [
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_1,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_3,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_5,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_6,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_7,
-        ZVEZDOCHKA_TICKET_COMPONENT_SNS_LINK_8,
-    ];
-    const INDIVIDUAL_LABEL: &'static str = "SNSリンク";
+impl FromListModal for SnsLink {
+    const MULTI_TYPE: MultiInteractType = MultiInteractType::SnsLink;
 
     const REQUIRED: Required = Required::Optional;
 
     type AddOrIndividualInput = SnsLinksModal;
-
     type DeleteInput = DeleteSnsLinksModal;
 
-    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+    fn parse_individual(_context: &Work, input: Self::AddOrIndividualInput) -> Result<Self, Error> {
         Ok(SnsLink {
             url: Url::parse(&input.link)?,
         })
@@ -1290,13 +1305,12 @@ pub struct IllustrationModal {
     #[min_length = 1]
     pub title: FixedString<u16>,
     #[name = "このイラストの説明"]
+    #[max_length = 100]
+    pub description: FixedString<u16>,
+    #[name = "イメージファイル名（まずアップロード必須)"]
     #[max_length = 50]
     #[min_length = 1]
-    pub description: FixedString<u16>,
-    #[file_upload]
-    #[file_types("image")]
-    #[name = "ファイル (JPG, PNG, WEBPのみ)"]
-    pub image: FixedArray<Attachment, u32>,
+    pub image: FixedString<u16>,
     #[name = "メンバーページある作成者"]
     #[description = "名は\",\"で分離して入力してください。英語字幕のみです。（例: mitsumori, knoeze, seeyoumayday)"]
     pub authors: FixedString<u16>,
@@ -1314,68 +1328,48 @@ pub struct DeleteIllustrationModal {
     pub number: FixedString<u16>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TitleAndIllustraion {
     pub title: String,
     pub illustration: Illustration,
-    pub attachment: AttachmentOrDownloadURL,
 }
 
-impl FromListModal<5> for TitleAndIllustraion {
-    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_ILLUSTRATION;
-
-    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_ILLUSTRATION;
-
-    const ITEM_IDS: [&'static str; 5] = [
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_1,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_3,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_ILLUSTRATION_5,
-    ];
-
-    const INDIVIDUAL_LABEL: &'static str = "イラスト";
-
+impl FromListModal for TitleAndIllustraion {
     const REQUIRED: Required = Required::Optional;
 
     type AddOrIndividualInput = IllustrationModal;
 
     type DeleteInput = DeleteIllustrationModal;
 
-    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
-        if input.image.len() != 1 {
-            return Err(Error::msg("Needs exactly one image!"));
-        }
-
-        let attachment = input.image[0].clone();
-
-        check_attachmemt_is_picture_and_under_flimit(&attachment)?;
-
-        let illustrators = parse_authors(&input.authors)?;
+    fn parse_individual(context: &Work, input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+        let illustrators = parse_authors(&context.name_map, &input.authors)?;
         let additional_illustrators = parse_additional_authors(&input.additional_authors);
 
-        let illustration = process_attachment(
-            &attachment,
+        check_file_exists(&context.directory, PathSection::Image, &input.image);
+
+        let illustration = Illustration {
+            image: input.image.into_string(),
             illustrators,
             additional_illustrators,
-            Some(input.description.into_string()),
-        )?;
+            description: Some(input.description.into_string()),
+        };
 
         Ok(TitleAndIllustraion {
             title: input.title.into_string(),
             illustration,
-            attachment: AttachmentOrDownloadURL::Attachment(attachment),
         })
     }
 
     fn parse_delete(input: Self::DeleteInput) -> Result<usize, Error> {
         Ok(input.number.parse::<usize>()?)
     }
+
+    const MULTI_TYPE: MultiInteractType = MultiInteractType::Illustrations;
 }
 
 // album tracks
 
-#[derive(Clone, Debug, Modal, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Modal, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[name = "アルバムトラックずつ情報"]
 pub struct AlbumTrackModal {
     #[name = "（必須）アルバムトラック題名"]
@@ -1404,51 +1398,23 @@ pub struct DeleteTrackModal {
     pub number: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct AlbumTitleAndTrack {
     pub title: String,
     pub track: Track,
 }
 
-impl FromListModal<20> for AlbumTitleAndTrack {
-    const ADD_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_NEW_TRACK;
-
-    const REMOVE_MODAL_ID: &'static str = ZVEZDOCHKA_TICKET_COMPONENT_DELETE_TRACK;
-
-    const ITEM_IDS: [&'static str; 20] = [
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_1,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_2,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_3,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_4,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_5,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_6,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_7,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_8,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_9,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_10,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_11,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_12,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_13,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_14,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_15,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_16,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_17,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_18,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_19,
-        ZVEZDOCHKA_TICKET_COMPONENT_TRACK_20,
-    ];
-
-    const INDIVIDUAL_LABEL: &'static str = "トラック";
-
+impl FromListModal for AlbumTitleAndTrack {
+    const MULTI_TYPE: MultiInteractType = MultiInteractType::AlbumTracks;
     const REQUIRED: Required = Required::Optional;
 
     type AddOrIndividualInput = AlbumTrackModal;
     type DeleteInput = DeleteTrackModal;
 
-    fn parse_individual(input: Self::AddOrIndividualInput) -> Result<Self, Error> {
+    fn parse_individual(context: &Work, input: Self::AddOrIndividualInput) -> Result<Self, Error> {
         let title = input.title.to_string();
         let duration = FancyDuration::parse(&input.length_mmss)?;
-        let authors = parse_authors(&input.authors)?;
+        let authors = parse_authors(&context.name_map, &input.authors)?;
         let additional_authors = parse_additional_authors(&input.additional_authors);
 
         Ok(AlbumTitleAndTrack {

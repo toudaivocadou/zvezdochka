@@ -1,9 +1,13 @@
+use std::str::FromStr;
+
 use anyhow::Error;
+use camino::{Utf8Path, Utf8PathBuf};
 use chrono::Utc;
-use poise::serenity_prelude::{ChannelId, UserId};
+use octocrab::models::PullRequestId;
+use poise::serenity_prelude::UserId;
 use sqlx::{SqlitePool, query};
 
-use crate::bot::ticket::Status;
+use crate::bot::{StateChangeToken, TicketId, WorkState, WorkStateInt, WorkWorkingData};
 
 pub struct Sql {
     database: SqlitePool,
@@ -107,30 +111,49 @@ impl Sql {
         Ok(())
     }
 
-    // pub async fn tickets(&self) -> Result<Vec<(id, )>, Error> {}
-    pub async fn new_ticket(&self, channel_id: ChannelId, user: UserId) -> Result<(), Error> {
+    pub async fn new_ticket(
+        &self,
+        channel_id: TicketId,
+        user: UserId,
+        path: &Utf8Path,
+    ) -> Result<i64, Error> {
         let channel_id_i64 = channel_id.get() as i64;
+        let mut txn = self.database.begin().await?;
+
+        if let Some(_) = query!(
+            "SELECT * FROM tickets WHERE ticket_channel_id = $1 LIMIT 1",
+            channel_id_i64
+        )
+        .fetch_optional(&mut *txn)
+        .await?
+        {
+            return Err(Error::msg("この作業はもう存在であります。"));
+        }
+
         let user_id_i64 = user.get() as i64;
-        let now = Utc::now().timestamp();
-        let open = Status::Initalizing.to_string();
-        let _ = query!(
-            "INSERT INTO tickets(ticket_channel_id, created_by, created_on_tsec, status) VALUES ($1, $2, $3, $4)",
+        let time = Utc::now().timestamp();
+        let open = WorkState::Initializing.state_int().to_state_int();
+        let result = query!(
+            "INSERT INTO tickets(ticket_channel_id, created_by, created_on, state, path) VALUES ($1, $2, $3, $4, $5)",
             channel_id_i64,
             user_id_i64,
-            now,
-            open
-        ).execute(&self.database).await?;
+            time,
+            open,
+            &path.to_string()
+        ).execute(&mut *txn).await?;
 
-        return Ok(());
+        txn.commit().await?;
+
+        return Ok(result.last_insert_rowid());
     }
 
     pub async fn is_channel_id_a_ticket_channel(
         &self,
-        channel_id: ChannelId,
+        channel_id: TicketId,
     ) -> Result<bool, Error> {
         let channel = channel_id.get() as i64;
         let count = query!(
-            "SELECT * FROM tickets WHERE ticket_channel_id = $1 LIMIT 1",
+            "SELECT rowid FROM tickets WHERE ticket_channel_id = $1 LIMIT 1",
             channel
         )
         .fetch_optional(&self.database)
@@ -140,28 +163,165 @@ impl Sql {
         return Ok(count);
     }
 
-    pub async fn update_ticket_after_init(
+    pub async fn initalise_ticket(
         &self,
-        channel_id: ChannelId,
+        ticket: TicketId,
         commit: &[u8],
-        path: &str,
+        change_token: StateChangeToken,
     ) -> Result<(), Error> {
-        let channel = channel_id.get() as i64;
-        let open = Status::Open.to_string();
-        let _ = query!("UPDATE tickets SET start_commit = $1, path = $2, status = $3 WHERE ticket_channel_id = $4", commit, path, open, channel).execute(&self.database).await?;
-        Ok(())
-    }
+        self.is_channel_id_a_ticket_channel(ticket).await?;
 
-    pub async fn set_ticket_state_error(&self, channel_id: ChannelId) -> Result<(), Error> {
-        let channel = channel_id.get() as i64;
-        let open = Status::Error.to_string();
+        let idle_state = WorkState::Idle.state_int().to_state_int();
+        if change_token.old_state() != WorkState::Initializing.state_int() {
+            return Err(Error::msg("Bad state!"));
+        }
+        let channel = ticket.get() as i64;
+
         let _ = query!(
-            "UPDATE tickets SET status = $1 WHERE ticket_channel_id = $2",
-            open,
+            "
+        UPDATE tickets SET state = $1, start_commit = $2 WHERE ticket_channel_id = $4
+            ",
+            idle_state,
+            commit,
             channel
         )
         .execute(&self.database)
         .await?;
+
         Ok(())
+    }
+
+    pub async fn update_ticket_state(
+        &self,
+        ticket: TicketId,
+        work_state: &WorkState,
+        _change_token: StateChangeToken,
+    ) -> Result<(), Error> {
+        self.is_channel_id_a_ticket_channel(ticket).await?;
+
+        let mut txn = self.database.begin().await?;
+
+        let work_state_int = work_state.state_int().to_state_int();
+        let channel = ticket.get() as i64;
+
+        let _ = query!(
+            "
+        UPDATE tickets SET state = $1 WHERE ticket_channel_id = $2
+            ",
+            work_state_int,
+            channel
+        )
+        .execute(&mut *txn)
+        .await?;
+
+        let _ = query!(
+            "DELETE FROM tickets_checkpoint WHERE ticket_channel_id = $1",
+            channel
+        )
+        .execute(&mut *txn)
+        .await?;
+
+        let time = Utc::now().timestamp();
+
+        match work_state {
+            WorkState::Working(work_working_data) => {
+                let json = serde_sqlite_jsonb::to_vec(work_working_data)?;
+                let _ = query!(
+                    "INSERT INTO tickets_checkpoint VALUES ($1, $2)",
+                    channel,
+                    json
+                )
+                .execute(&mut *txn)
+                .await?;
+
+                let _ = query!(
+                    "UPDATE tickets SET closed_on = $1 WHERE ticket_channel_id = $2",
+                    time,
+                    channel
+                )
+                .execute(&mut *txn)
+                .await?;
+            }
+            WorkState::Submitted(pr_number) => {
+                let _ = query!(
+                    "INSERT INTO tickets_submitted VALUES ($1, $2)",
+                    channel,
+                    pr_number.0 as i64
+                )
+                .execute(&mut *txn)
+                .await?;
+
+                let _ = query!(
+                    "UPDATE tickets SET closed_on = $1 WHERE ticket_channel_id = $2",
+                    time,
+                    channel
+                )
+                .execute(&mut *txn)
+                .await?;
+            }
+            _ => {}
+        }
+
+        txn.commit().await?;
+
+        Ok(())
+    }
+
+    pub async fn tickets_by_state(&self, state: WorkStateInt) -> Result<Vec<TicketId>, Error> {
+        Ok(query!(
+            "SELECT ticket_channel_id FROM tickets WHERE state = $1",
+            &state.to_state_int()
+        )
+        .fetch_all(&self.database)
+        .await?
+        .into_iter()
+        .map(|rec| TicketId(rec.ticket_channel_id))
+        .collect())
+    }
+
+    pub async fn ticket_by_id(&self, id: TicketId) -> Result<(Utf8PathBuf, WorkState), Error> {
+        let channel_id = id.get() as i64;
+        let mut txn = self.database.begin().await?;
+
+        let ticket = query!(
+            "SELECT state, path FROM tickets WHERE ticket_channel_id = $1",
+            channel_id
+        )
+        .fetch_one(&mut *txn)
+        .await?;
+
+        let state = WorkStateInt::try_from(ticket.state as i32)?;
+        let work_state = match state {
+            WorkStateInt::Initializing => WorkState::Initializing,
+            WorkStateInt::Idle => WorkState::Idle,
+            WorkStateInt::Working => {
+                let state_data = query!(
+                    "SELECT work_state_json FROM tickets_checkpoint WHERE ticket_channel_id = $1",
+                    channel_id
+                )
+                .fetch_one(&mut *txn)
+                .await?
+                .work_state_json;
+                let state_deser = serde_sqlite_jsonb::from_slice::<WorkWorkingData>(&state_data)?;
+                WorkState::Working(state_deser)
+            }
+            WorkStateInt::Closed => WorkState::Closed,
+            WorkStateInt::Submitted => {
+                let pr_number = query!(
+                    "SELECT pr_number FROM tickets_submitted WHERE ticket_channel_id = $1",
+                    channel_id
+                )
+                .fetch_one(&mut *txn)
+                .await?
+                .pr_number;
+                WorkState::Submitted(PullRequestId(pr_number as u64))
+            }
+        };
+
+        let path = Utf8PathBuf::from_str(&ticket.path)?;
+
+        txn.commit().await?;
+
+        Ok((path, work_state))
     }
 }

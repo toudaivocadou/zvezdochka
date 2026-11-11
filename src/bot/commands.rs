@@ -1,4 +1,7 @@
-use crate::bot::{Data, event::TICKET_OPEN_BUTTON_INTERACTION_ID};
+use crate::bot::{
+    Data,
+    utils::{ComponentInteractionTypes, TicketComponents::TicketOpen},
+};
 use anyhow::Error;
 use poise::{
     Context, CreateReply,
@@ -72,8 +75,9 @@ pub async fn create_ticket_message(ctx: Context<'_, Data, Error>) -> Result<(), 
         .guild()
         .ok_or(Error::msg("needs to be run in a guild channel!"))?;
 
-    let button = CreateButton::new(TICKET_OPEN_BUTTON_INTERACTION_ID)
-        .label("新しいサイト編集チャネルを開く");
+    let button =
+        CreateButton::new(ComponentInteractionTypes::Ticket(TicketOpen).to_component_id_cow())
+            .label("新しいサイト編集チャネルを開く");
 
     let container_components = [CreateContainerComponent::ActionRow(
         CreateActionRow::Buttons(Cow::Borrowed(&[button])),

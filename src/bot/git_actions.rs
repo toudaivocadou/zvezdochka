@@ -1,23 +1,42 @@
 use anyhow::Error;
+use camino::Utf8PathBuf;
+use flume::Sender;
 use git2::{
     Cred, Direction, FetchOptions, IndexAddOption, PushOptions, RemoteCallbacks, Repository,
     Signature, build::RepoBuilder,
 };
+use humansize::{DECIMAL, format_size};
 use octocrab::{Octocrab, models::pulls::PullRequest};
-use std::{path::Path, sync::Arc};
-use tokio::sync::mpsc::Sender;
+use poise::serenity_prelude::ThreadId;
+use std::{fmt::Display, str::FromStr, sync::Arc};
 
-pub struct GitShhh {
-    pub pubkey: String,
-    pub privkey: String,
-}
-
-pub struct GHApiKey {}
+use crate::bot::Data;
 
 #[derive(Clone, Debug)]
 pub enum FromRemoteProgress {
     Counting(String),
     Transfer(Box<GitRecvProgress>),
+}
+
+impl Display for FromRemoteProgress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FromRemoteProgress::Counting(counting) => write!(f, "Counting Objects: {counting}"),
+            FromRemoteProgress::Transfer(git_recv_progress) => {
+                write!(
+                    f,
+                    "Objects: {} Total ({} Indexed, {} Received, {} Local)\nDeltas: {} Total ({} Indexed)\nBytes: {} Received.",
+                    git_recv_progress.total_objects,
+                    git_recv_progress.indexed_objects,
+                    git_recv_progress.received_objects,
+                    git_recv_progress.local_objects,
+                    git_recv_progress.total_deltas,
+                    git_recv_progress.indexed_deltas,
+                    format_size(git_recv_progress.received_bytes, DECIMAL)
+                )
+            }
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -44,12 +63,18 @@ pub struct GitSendProgress {
     pub bytes: u64,
 }
 
+pub struct CreatedGit {
+    pub commit_sha: Vec<u8>,
+    pub commit_message: String,
+    pub path: Utf8PathBuf,
+    pub repository: Repository,
+}
+
 pub fn clone_git(
+    data: Arc<Data>,
+    thread_channel: ThreadId,
     progress: Arc<Sender<FromRemoteProgress>>,
-    git_secrets: &GitShhh,
-    git_url: &str,
-    to_directory: &str,
-) -> Result<Repository, Error> {
+) -> Result<CreatedGit, Error> {
     let sb_prog = progress.clone();
     let recv_progress = progress.clone();
 
@@ -57,14 +82,14 @@ pub fn clone_git(
     callbacks.credentials(|_, username, _| {
         Cred::ssh_key_from_memory(
             username.unwrap(),
-            Some(&git_secrets.pubkey),
-            &git_secrets.privkey,
+            Some(&data.shhh.git_public_key),
+            &data.shhh.git_private_key,
             None,
         )
     });
     callbacks.sideband_progress(|progress| {
         let data = String::from_utf8_lossy(progress).to_string();
-        let _ = sb_prog.try_send(FromRemoteProgress::Counting(data));
+        let _ = sb_prog.send(FromRemoteProgress::Counting(data));
         true
     });
     callbacks.transfer_progress(|progress| {
@@ -77,18 +102,36 @@ pub fn clone_git(
             indexed_deltas: progress.indexed_deltas() as u64,
             received_bytes: progress.received_bytes() as u64,
         };
-        let _ = recv_progress.try_send(FromRemoteProgress::Transfer(Box::new(git_prog)));
+        let _ = recv_progress.send(FromRemoteProgress::Transfer(Box::new(git_prog)));
         true
     });
 
     let mut fetch_opts = FetchOptions::new();
     fetch_opts.remote_callbacks(callbacks);
 
-    let repo = RepoBuilder::new()
-        .fetch_options(fetch_opts)
-        .clone(git_url, Path::new(to_directory))?;
+    let path = Utf8PathBuf::from_str(&format!(
+        "{}/{}",
+        data.config.site_prefix,
+        thread_channel.get()
+    ))?;
 
-    Ok(repo)
+    let repository = RepoBuilder::new()
+        .fetch_options(fetch_opts)
+        .clone(&data.config.git.repo_url, path.as_std_path())?;
+
+    let (commit_message, commit_sha) = {
+        let head_commit = repository.head()?.peel_to_commit()?;
+        let commit_message = head_commit.message()?.to_string();
+        let commit_sha = head_commit.id().as_bytes().to_vec();
+        (commit_message, commit_sha)
+    };
+
+    Ok(CreatedGit {
+        commit_sha,
+        commit_message,
+        path,
+        repository,
+    })
 }
 
 pub fn import_existing_repository(path: &str) -> Result<Repository, Error> {
@@ -129,9 +172,9 @@ pub fn stage_and_commit(
 }
 
 pub fn push(
-    repository: &Repository,
+    data: Arc<Data>,
     progress: Arc<Sender<ToRemoteProgress>>,
-    git_secrets: &GitShhh,
+    repository: Repository,
 ) -> Result<(), Error> {
     let update_ref_prog = progress.clone();
     let push_progress = progress.clone();
@@ -140,8 +183,8 @@ pub fn push(
     callbacks.credentials(|_, username, _| {
         Cred::ssh_key_from_memory(
             username.unwrap(),
-            Some(&git_secrets.pubkey),
-            &git_secrets.privkey,
+            Some(&data.shhh.git_public_key),
+            &data.shhh.git_private_key,
             None,
         )
     });

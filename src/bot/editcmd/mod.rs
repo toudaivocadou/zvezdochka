@@ -1,5 +1,5 @@
-mod album;
-mod artist;
-mod common;
-mod news;
-mod song;
+pub mod album;
+pub mod artist;
+pub mod common;
+pub mod news;
+pub mod song;
