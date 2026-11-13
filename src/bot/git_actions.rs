@@ -7,10 +7,9 @@ use git2::{
 };
 use humansize::{DECIMAL, format_size};
 use octocrab::{Octocrab, models::pulls::PullRequest};
-use poise::serenity_prelude::ThreadId;
-use std::{fmt::Display, str::FromStr, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
-use crate::bot::Data;
+use crate::bot::{Data, TicketId, utils::ticket_work_path};
 
 #[derive(Clone, Debug)]
 pub enum FromRemoteProgress {
@@ -72,24 +71,25 @@ pub struct CreatedGit {
 
 pub fn clone_git(
     data: Arc<Data>,
-    thread_channel: ThreadId,
+    ticket_id: TicketId,
     progress: Arc<Sender<FromRemoteProgress>>,
 ) -> Result<CreatedGit, Error> {
     let sb_prog = progress.clone();
     let recv_progress = progress.clone();
 
     let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(|_, username, _| {
+    let data2 = data.clone();
+    callbacks.credentials(move |_, username, _| {
         Cred::ssh_key_from_memory(
             username.unwrap(),
-            Some(&data.shhh.git_public_key),
-            &data.shhh.git_private_key,
+            Some(&data2.shhh.git_public_key),
+            &data2.shhh.git_private_key,
             None,
         )
     });
     callbacks.sideband_progress(|progress| {
-        let data = String::from_utf8_lossy(progress).to_string();
-        let _ = sb_prog.send(FromRemoteProgress::Counting(data));
+        let progress = String::from_utf8_lossy(progress).to_string();
+        let _ = sb_prog.send(FromRemoteProgress::Counting(progress));
         true
     });
     callbacks.transfer_progress(|progress| {
@@ -109,15 +109,12 @@ pub fn clone_git(
     let mut fetch_opts = FetchOptions::new();
     fetch_opts.remote_callbacks(callbacks);
 
-    let path = Utf8PathBuf::from_str(&format!(
-        "{}/{}",
-        data.config.site_prefix,
-        thread_channel.get()
-    ))?;
+    let path = ticket_work_path(data.clone(), ticket_id);
 
+    let data3 = data.clone();
     let repository = RepoBuilder::new()
         .fetch_options(fetch_opts)
-        .clone(&data.config.git.repo_url, path.as_std_path())?;
+        .clone(&data3.config.git.repo_url, path.as_std_path())?;
 
     let (commit_message, commit_sha) = {
         let head_commit = repository.head()?.peel_to_commit()?;

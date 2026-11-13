@@ -3,13 +3,16 @@ use std::{
     fmt::Display,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::Error;
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use poise::serenity_prelude::{
     Attachment, ButtonStyle, CreateButton, ReactionType, small_fixed_array::FixedString,
 };
+
+use crate::bot::{Data, TicketId};
 
 pub const FILE_SIZE_LIMIT_BYTES: u32 = 5242880; // 5 mb
 
@@ -568,6 +571,15 @@ pub enum ModalSubmitIds {
     Singular(SingularEditComponents),
     Multiple(MultipleEditComponents),
     Ticket(),
+}
+
+pub fn ticket_thread_name(data: Arc<Data>, ticket: TicketId) -> String {
+    format!("{}-{}", data.config.site_prefix, ticket.get())
+}
+
+pub fn ticket_work_path(data: Arc<Data>, ticket: TicketId) -> Utf8PathBuf {
+    let new_path = ticket_thread_name(data, ticket);
+    Utf8PathBuf::from_str(&new_path).unwrap() // the err is !, which means this is infalliable
 }
 
 const TICKET_OPEN_BUTTON_INTERACTION_ID: &'static str = "ZVEZDOCHKA_OPEN_TICKET";

@@ -1,9 +1,6 @@
 use anyhow::Error;
 use fancy_duration::FancyDuration;
-use poise::{
-    Context, CreateReply,
-    serenity_prelude::{ChannelId, MessageFlags},
-};
+use poise::{Context, CreateReply, serenity_prelude::MessageFlags};
 use std::{collections::HashSet, default::Default, time::Duration};
 use tokio::{
     fs::{File, remove_file},
@@ -13,7 +10,7 @@ use url::Url;
 
 use crate::{
     bot::{
-        Data, WorkWorkingData,
+        Data, TicketId, WorkWorkingData,
         editcmd::common::{
             ERR_MSG_ONLY_WORK_CHANNEL, ERR_WORK_MUTEX_LOCK, ensure_new_work, glob_files,
             split_file_str,
@@ -37,8 +34,10 @@ pub async fn list_albums(ctx: Context<'_, Data, Error>, page: Option<u32>) -> Re
         ctx.reply("不正引数: 第0ページは存在しません。").await?;
         return Ok(());
     }
-    let channel_id = ChannelId::from(ctx.channel_id().get());
-    match ctx.data().work_states.get(&channel_id) {
+
+    let ticket_id: TicketId = ctx.channel_id().into();
+
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             match glob_files(&work.directory, ALBUM_GLOB)?
                 .chunks(15)
@@ -78,9 +77,9 @@ pub async fn list_albums(ctx: Context<'_, Data, Error>, page: Option<u32>) -> Re
 
 #[poise::command(slash_command, prefix_command, guild_only)]
 pub async fn about_album(ctx: Context<'_, Data, Error>, album_file: String) -> Result<(), Error> {
-    let channel_id = ChannelId::new(ctx.channel_id().get());
+    let ticket_id: TicketId = ctx.channel_id().into();
 
-    match ctx.data().work_states.get(&channel_id) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             let file_path =
                 verify_and_canonicalise_path(&work.directory, PathSection::Album, &album_file)?;
@@ -189,10 +188,10 @@ SNSリンク:
 pub async fn new_album(ctx: Context<'_, Data, Error>) -> Result<(), Error> {
     ctx.reply("作業準備中...").await?;
 
-    let channel_id = ChannelId::new(ctx.channel_id().get());
-    ensure_new_work(ctx.data(), channel_id).await?;
+    let ticket_id: TicketId = ctx.channel_id().into();
+    ensure_new_work(ctx.data(), ticket_id).await?;
 
-    match ctx.data().work_states.get(&channel_id) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             let workdata = WorkData::Album {
                 page: AlbumWorkStatePage::BasicInfo,
@@ -227,7 +226,7 @@ pub async fn new_album(ctx: Context<'_, Data, Error>) -> Result<(), Error> {
 
                     ctx.data()
                         .database
-                        .update_ticket_state(channel_id.into(), &workstate, token)
+                        .update_ticket_state(ticket_id, &workstate, token)
                         .await?;
 
                     return Ok(());
@@ -246,10 +245,10 @@ pub async fn from_bandcamp(
 ) -> Result<(), Error> {
     ctx.reply("データ獲得準備中...").await?;
 
-    let channel_id = ChannelId::new(ctx.channel_id().get());
-    ensure_new_work(ctx.data(), channel_id).await?;
+    let ticket_id: TicketId = ctx.channel_id().into();
+    ensure_new_work(ctx.data(), ticket_id).await?;
 
-    match ctx.data().work_states.get(&channel_id) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             let album_link = Url::parse(&bandcamp_link)?;
             match album_link.domain() {
@@ -412,7 +411,7 @@ pub async fn from_bandcamp(
 
                     ctx.data()
                         .database
-                        .update_ticket_state(channel_id.into(), &workstate, token)
+                        .update_ticket_state(ticket_id, &workstate, token)
                         .await?;
 
                     return Ok(());
@@ -426,10 +425,10 @@ pub async fn from_bandcamp(
 
 #[poise::command(slash_command, guild_only)]
 pub async fn edit_album(ctx: Context<'_, Data, Error>, album_file: String) -> Result<(), Error> {
-    let channel_id = ChannelId::new(ctx.channel_id().get());
-    ensure_new_work(ctx.data(), channel_id).await?;
+    let ticket_id: TicketId = ctx.channel_id().into();
+    ensure_new_work(ctx.data(), ticket_id).await?;
 
-    match ctx.data().work_states.get(&channel_id) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             let editing_path =
                 verify_and_canonicalise_path(&work.directory, PathSection::Album, &album_file)?;
@@ -521,7 +520,7 @@ pub async fn edit_album(ctx: Context<'_, Data, Error>, album_file: String) -> Re
 
                     ctx.data()
                         .database
-                        .update_ticket_state(channel_id.into(), &workstate, token)
+                        .update_ticket_state(ticket_id, &workstate, token)
                         .await?;
 
                     return Ok(());
@@ -535,9 +534,9 @@ pub async fn edit_album(ctx: Context<'_, Data, Error>, album_file: String) -> Re
 
 #[poise::command(slash_command, guild_only)]
 pub async fn delete_album(ctx: Context<'_, Data, Error>, album_file: String) -> Result<(), Error> {
-    let channel_id = ChannelId::new(ctx.channel_id().get());
+    let ticket_id: TicketId = ctx.channel_id().into();
 
-    match ctx.data().work_states.get(&channel_id) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             let file_path =
                 verify_and_canonicalise_path(&work.directory, PathSection::Album, &album_file)?;

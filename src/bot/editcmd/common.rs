@@ -4,16 +4,13 @@ use anyhow::Error;
 use camino::Utf8Path;
 use glob::{GlobError, glob};
 use indexmap::IndexMap;
-use poise::{
-    Context,
-    serenity_prelude::{Attachment, ChannelId},
-};
+use poise::{Context, serenity_prelude::Attachment};
 use tokio::io::AsyncReadExt;
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::{
     bot::{
-        Data, WorkState,
+        Data, TicketId, WorkState,
         utils::{
             PathSection, check_attachmemt_is_picture_and_under_flimit, verify_and_canonicalise_path,
         },
@@ -64,10 +61,7 @@ pub fn glob_files(base_dir: &Utf8Path, glob_str: &str) -> Result<Vec<PathBuf>, E
     files.map_err(|why| Error::msg(why.to_string()))
 }
 
-pub async fn ensure_new_work(
-    context: Arc<Data>,
-    channel_ticket_id: ChannelId,
-) -> Result<(), Error> {
+pub async fn ensure_new_work(context: Arc<Data>, channel_ticket_id: TicketId) -> Result<(), Error> {
     match context.work_states.get(&channel_ticket_id) {
         Some(work) => match &*work.work_state.try_lock()? {
             WorkState::Initializing => return Err(Error::msg("まだ作業を準備しています。")),
@@ -93,9 +87,9 @@ pub async fn upload_image(
     overwrite: Option<bool>,
 ) -> Result<(), Error> {
     ctx.defer().await?;
-    let invocation_channel = ChannelId::new(ctx.channel_id().get());
+    let ticket_id: TicketId = ctx.channel_id().into();
     let overwrite = overwrite.unwrap_or(false);
-    match ctx.data().work_states.get(&invocation_channel) {
+    match ctx.data().work_states.get(&ticket_id) {
         Some(work) => {
             check_attachmemt_is_picture_and_under_flimit(&image)?;
             let work_directory = work.directory.as_path();

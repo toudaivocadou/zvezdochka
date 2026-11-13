@@ -1,11 +1,14 @@
 use crate::bot::editcmd::common::construct_name_map;
 use crate::bot::git_actions::{CreatedGit, clone_git};
-use crate::bot::{Data, Work, WorkState};
+use crate::bot::utils::ticket_work_path;
+use crate::bot::{Data, TicketId, Work, WorkState};
 use crate::site::buildsite;
+use crate::site::namemap::NameMap;
 use anyhow::Error;
 use flume::unbounded;
+use indexmap::IndexMap;
 use poise::serenity_prelude::{
-    ChannelId, ChannelType, CreateThread, EditThread, GenericChannelId, GuildThread, User,
+    ChannelType, CreateThread, EditThread, GenericChannelId, GuildThread, User,
 };
 use poise::serenity_prelude::{CreateMessage, Http};
 use std::borrow::Cow;
@@ -19,10 +22,21 @@ pub async fn create_new_ticket_channel(
     channel: GenericChannelId,
     user: User,
 ) -> Result<GuildThread, Error> {
-    let this_ticket_internal_id = data
-        .database
-        .new_ticket(ChannelId::new(channel.get()), user.id)
-        .await?;
+    let ticket = TicketId::from(channel);
+    let path = ticket_work_path(data.clone(), ticket);
+
+    let this_ticket_internal_id = data.database.new_ticket(ticket, user.id, &path).await?;
+
+    data.work_states.insert(
+        ticket,
+        Work {
+            directory: path,
+            work_state: Arc::new(Mutex::new(WorkState::Initializing)),
+            name_map: NameMap {
+                members: IndexMap::default(),
+            },
+        },
+    );
 
     let guild_channel = http
         .get_channel(channel)
@@ -63,27 +77,26 @@ pub async fn clone_git_to_channel(
     let (send, recv) = unbounded();
 
     let git_data = data.clone();
-    let thread_id = thread.id;
-    let git_repo = spawn_blocking(move || clone_git(git_data, thread_id, Arc::new(send))).await??;
+    let ticket_id: TicketId = thread.id.into();
+    let git_repo = spawn_blocking(move || clone_git(git_data, ticket_id, Arc::new(send))).await??;
 
     let name_map = construct_name_map(&git_repo.path).await?;
 
-    data.database
-        .update_ticket_after_init(
-            thread.id.get(),
-            &git_repo.commit_sha,
-            git_repo.path.as_str(),
-        )
-        .await?;
+    let state_change_token = match data.work_states.get_mut(&ticket_id) {
+        Some(mut state) => {
+            state.name_map = name_map;
+            state.work_state.lock().await.to_idle()?
+        }
+        None => {
+            return Err(Error::msg(
+                "この作業は存在していません！ (clone git to channel)",
+            ));
+        }
+    };
 
-    data.work_states.insert(
-        ChannelId::new(thread.id.get()),
-        Work {
-            directory: git_repo.path.clone(),
-            name_map,
-            work_state: Arc::new(Mutex::new(WorkState::Idle)),
-        },
-    );
+    data.database
+        .initalise_ticket(ticket_id, &git_repo.commit_sha, state_change_token)
+        .await?;
 
     match recv.drain().last() {
         Some(progress) => {
@@ -110,13 +123,25 @@ pub async fn clone_git_to_channel(
 pub async fn close_site_channel(
     data: Arc<Data>,
     http: Arc<Http>,
-    thread: GuildThread,
+    mut thread: GuildThread,
 ) -> Result<(), Error> {
-    data.database
-        .thread
+    let ticket_id: TicketId = thread.id.into();
+
+    match data.work_states.get_mut(&ticket_id) {
+        Some(state) => {
+            let mut workstate = state.work_state.lock().await;
+            let token = workstate.to_close()?;
+            data.database
+                .update_ticket_state(ticket_id, &workstate, token)
+                .await?;
+        }
+        None => return Err(Error::msg("作業終了が失敗しました: 作業は存在していません")),
+    };
+
+    thread
         .send_message(
             &http,
-            CreateMessage::new().content("作業を閉めます。".into()),
+            CreateMessage::new().content(Cow::Borrowed("作業を閉めます。")),
         )
         .await?;
 
@@ -126,9 +151,11 @@ pub async fn close_site_channel(
             EditThread::new()
                 .locked(true)
                 .archived(true)
-                .audit_log_reason("使用者が作業をキャンセルしました。".into()),
+                .audit_log_reason(Cow::Borrowed("使用者が作業をやめました。")),
         )
         .await?;
+
+    Ok(())
 }
 
 pub async fn run_site_build(data: Arc<Data>, ticket_id: u64) -> Result<(), Error> {

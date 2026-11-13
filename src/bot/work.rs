@@ -671,7 +671,7 @@ where
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ModalListWrapper<T>
 where
-    T: FromListModal + Serialize + DeserializeOwned,
+    T: FromListModal + Debug,
 {
     items: Vec<ModalListWrapperIndividualItem<T>>,
 }
@@ -827,8 +827,8 @@ trait FromListModal: Sized + Clone + Debug + Serialize + DeserializeOwned {
     const MULTI_TYPE: MultiInteractType;
     const REQUIRED: Required;
 
-    type AddOrIndividualInput: Modal;
-    type DeleteInput: Modal;
+    type AddOrIndividualInput: Modal + Clone + Debug + Serialize + DeserializeOwned;
+    type DeleteInput: Modal + Clone + Debug + Serialize + DeserializeOwned;
 
     fn parse_individual(context: &Work, input: Self::AddOrIndividualInput) -> Result<Self, Error>;
 
@@ -1111,7 +1111,7 @@ impl FromModal for TrackDuration {
     }
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "メンバー基本情報"]
 #[text_display = ""]
 pub struct MemberBasicInfoModal {
@@ -1201,7 +1201,7 @@ impl FromModal for MemberBasicInfo {
     }
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "メンバー追加情報"]
 #[text_display = ""]
 pub struct ExtendedMemberBasicInfoModal {
@@ -1297,7 +1297,7 @@ impl FromListModal for SnsLink {
     }
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "イラスト追加"]
 pub struct IllustrationModal {
     #[name = "このイラストの題名"]
@@ -1319,7 +1319,7 @@ pub struct IllustrationModal {
     pub additional_authors: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "イラスト消去"]
 #[text_display = "この編集から追加したイラストを消す"]
 pub struct DeleteIllustrationModal {
@@ -1389,7 +1389,7 @@ pub struct AlbumTrackModal {
     pub additional_authors: FixedString<u16>,
 }
 
-#[derive(Clone, Debug, Modal)]
+#[derive(Clone, Debug, Modal, Serialize, Deserialize)]
 #[name = "トラック消去"]
 #[text_display = "この編集から追加したトラックを消す"]
 pub struct DeleteTrackModal {

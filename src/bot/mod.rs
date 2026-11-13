@@ -246,7 +246,7 @@ impl TryFrom<i32> for WorkStateInt {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct TicketId(pub i64);
 
 impl TicketId {
@@ -299,7 +299,7 @@ pub struct Data {
     pub config: Config,
     pub database: Sql,
     pub shhh: Secrets,
-    pub work_states: DashMap<ChannelId, Work>,
+    pub work_states: DashMap<TicketId, Work>,
 }
 
 pub async fn start_bot() {}
